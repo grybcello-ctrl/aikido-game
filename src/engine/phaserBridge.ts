@@ -19,10 +19,11 @@ export const bindKeyboard = (
   const kb = scene.input.keyboard;
   if (!kb) throw new Error('keyboard input plugin is disabled');
   const K = Phaser.Input.Keyboard.KeyCodes;
+  // Space = ACTION (Z 보조), X = GUARD. capture=true → 스페이스/방향키의 브라우저 기본 동작(스크롤) 차단
   const keys = kb.addKeys(
-    { left: K.LEFT, right: K.RIGHT, up: K.UP, down: K.DOWN, action: K.Z, guard: K.X },
-    false,
-  ) as Record<'left' | 'right' | 'up' | 'down' | 'action' | 'guard', Phaser.Input.Keyboard.Key>;
+    { left: K.LEFT, right: K.RIGHT, up: K.UP, down: K.DOWN, action: K.SPACE, actionAlt: K.Z, guard: K.X },
+    true,
+  ) as Record<'left' | 'right' | 'up' | 'down' | 'action' | 'actionAlt' | 'guard', Phaser.Input.Keyboard.Key>;
 
   const engine = (): TimingEngine | null => (typeof target === 'function' ? target() : target);
   const stick = (): Stick | undefined =>
@@ -37,7 +38,7 @@ export const bindKeyboard = (
     key.on('up', up);
     return () => { key.off('down', down); key.off('up', up); };
   };
-  const unbind = [bind(keys.action, 'ACTION'), bind(keys.guard, 'GUARD')];
+  const unbind = [bind(keys.action, 'ACTION'), bind(keys.actionAlt, 'ACTION'), bind(keys.guard, 'GUARD')];
 
   const now = () => toEngineTime(scene.game.loop.now);
   return {

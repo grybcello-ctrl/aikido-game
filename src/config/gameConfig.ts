@@ -4,7 +4,7 @@ export const GAME_WIDTH = 640;
 export const GAME_HEIGHT = 360;
 
 /** 바닥선(캐릭터 발 기준점 y). 오프셋 데이터의 y=0 이 이 선에 대응. */
-export const FLOOR_Y = 300;
+export const FLOOR_Y = 276;
 
 export const createGameConfig = (
   scenes: Phaser.Types.Scenes.SceneType[] = [],
