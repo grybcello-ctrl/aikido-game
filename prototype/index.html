@@ -617,7 +617,7 @@
     open: b.targetMs + b.window.early[0],
     close: b.targetMs + b.window.late[1]
   });
-  var beatsOf = (input2) => input2.type === "none" ? [] : input2.type === "sequence" ? input2.beats : [input2];
+  var beatsOf = (input) => input.type === "none" ? [] : input.type === "sequence" ? input.beats : [input];
 
   // src/engine/phaserBridge.ts
   var bindKeyboard = (scene, target, toEngineTime = (t) => t) => {
@@ -625,8 +625,8 @@
     if (!kb) throw new Error("keyboard input plugin is disabled");
     const K = phaser_global_default.Input.Keyboard.KeyCodes;
     const keys = kb.addKeys(
-      { left: K.LEFT, right: K.RIGHT, up: K.UP, down: K.DOWN, action: K.Z, guard: K.X },
-      false
+      { left: K.LEFT, right: K.RIGHT, up: K.UP, down: K.DOWN, action: K.SPACE, actionAlt: K.Z, guard: K.X },
+      true
     );
     const engine = () => typeof target === "function" ? target() : target;
     const stick = () => keys.left.isDown ? "LEFT" : keys.right.isDown ? "RIGHT" : keys.up.isDown ? "UP" : keys.down.isDown ? "DOWN" : void 0;
@@ -640,7 +640,7 @@
         key.off("up", up);
       };
     };
-    const unbind = [bind(keys.action, "ACTION"), bind(keys.guard, "GUARD")];
+    const unbind = [bind(keys.action, "ACTION"), bind(keys.actionAlt, "ACTION"), bind(keys.guard, "GUARD")];
     const now = () => toEngineTime(scene.game.loop.now);
     return {
       now,
@@ -803,6 +803,13 @@
         tracks: r ? tracksOf(r) : null,
         nageFacing: r?.inputFacing ?? this.nageFacing,
         hitstop: nowMs !== void 0 && this.isFrozen(nowMs),
+        beat: r?.kind === "phase" ? {
+          index: r.beatIdx,
+          count: r.beats.length,
+          windowOpen: r.windowOpened,
+          resolved: r.resolved,
+          holding: r.holdStart !== null
+        } : null,
         ukemi: this.ukemi,
         stats: cloneStats(this.stats)
       };
@@ -968,16 +975,16 @@
       r.beatIdx++;
       r.windowOpened = false;
       r.holdStart = null;
-      const input2 = r.phase.input;
-      if (input2.type !== "sequence") {
+      const input = r.phase.input;
+      if (input.type !== "sequence") {
         this.resolve(r, grade);
         return;
       }
-      if (grade !== "perfect" && (input2.breakOn ?? ["miss"]).includes(grade)) {
+      if (grade !== "perfect" && (input.breakOn ?? ["miss"]).includes(grade)) {
         this.resolve(r, grade);
         return;
       }
-      const eff = grade === "miss" ? void 0 : input2.beatEffects?.[grade];
+      const eff = grade === "miss" ? void 0 : input.beatEffects?.[grade];
       if (eff) this.applyEffect(eff, r.id);
       if (r.beatIdx >= r.beats.length) {
         this.resolve(r, r.beatGrades.every((g) => g === "perfect") ? "perfect" : "clear");
@@ -1272,44 +1279,61 @@
   var GRADE_COLOR = {
     perfect: 2278750,
     early: 16436245,
-    late: 16347926,
-    miss: 15680580
+    late: 15680580,
+    miss: 11032055
   };
   var hex = (c) => `#${c.toString(16).padStart(6, "0")}`;
   var fmtMs = (ms) => `${ms >= 0 ? "+" : ""}${Math.round(ms)}ms`;
-  var STAGE_LABEL = { recognition: "1 인지", entry: "2 진입", throw: "3 던지기" };
-  var IGNORED = 7434618;
+  var FRAME_MS = 1e3 / 60;
+  var NONE = 4144966;
+  var IGNORED = 10265519;
   var MAX_MARKS = 12;
   var MAX_LOG = 5;
-  var FONT = { fontFamily: FONT_FAMILY, fontSize: "9px", color: "#e4e4e7" };
+  var font = (size, color = "#e4e4e7") => ({ fontFamily: FONT_FAMILY, fontSize: `${size}px`, color });
+  var inRange2 = (d, [a, b]) => d >= a && d < b;
+  var zoneOf = (beats, t) => {
+    for (let i = 0; i < beats.length; i++) {
+      const d = t - beats[i].targetMs;
+      const w = beats[i].window;
+      if (inRange2(d, w.early)) return { zone: "early", beat: i };
+      if (inRange2(d, w.perfect)) return { zone: "perfect", beat: i };
+      if (inRange2(d, w.late)) return { zone: "late", beat: i };
+    }
+    return null;
+  };
   var TimingDebugger = class {
-    constructor(scene, data, layer, x = 16, y = 304, w = 608) {
+    constructor(scene, data, layer, x = 16, y = 303, w = 608) {
+      __publicField(this, "scene", scene);
       __publicField(this, "data", data);
+      __publicField(this, "layer", layer);
       __publicField(this, "x", x);
       __publicField(this, "y", y);
       __publicField(this, "w", w);
       __publicField(this, "g");
       __publicField(this, "title");
-      __publicField(this, "clock");
+      __publicField(this, "info");
       __publicField(this, "markTexts", []);
       __publicField(this, "logTexts", []);
       __publicField(this, "phase", null);
       __publicField(this, "beats", []);
       __publicField(this, "phaseStart", 0);
+      /** 페이즈를 떠난 시점(페이즈 기준 ms). 진행 중이면 null */
+      __publicField(this, "leftAt", null);
       __publicField(this, "marks", []);
       __publicField(this, "log", []);
       __publicField(this, "barY");
-      this.barY = y + 14;
+      this.barY = y + 21;
       this.g = scene.add.graphics();
-      this.title = scene.add.text(x, y + 1, "", FONT);
-      this.clock = scene.add.text(x + w, y + 1, "", FONT).setOrigin(1, 0);
-      for (let i = 0; i < MAX_MARKS; i++) this.markTexts.push(scene.add.text(0, 0, "", FONT).setOrigin(0.5, 0).setVisible(false));
-      for (let i = 0; i < MAX_LOG; i++) this.logTexts.push(scene.add.text(0, y + 45, "", FONT));
-      layer.add([this.g, this.title, this.clock, ...this.markTexts, ...this.logTexts]);
+      this.title = scene.add.text(x, y + 2, "", font(9));
+      this.info = scene.add.text(x + w, y + 2, "", font(9, "#a1a1aa")).setOrigin(1, 0);
+      for (let i = 0; i < MAX_MARKS; i++) this.markTexts.push(scene.add.text(0, 0, "", font(8)).setOrigin(0.5, 0).setVisible(false));
+      for (let i = 0; i < MAX_LOG; i++) this.logTexts.push(scene.add.text(0, y + 47, "", font(9)));
+      layer.add([this.g, this.title, this.info, ...this.markTexts, ...this.logTexts]);
     }
     reset() {
       this.phase = null;
       this.beats = [];
+      this.leftAt = null;
       this.marks = [];
       this.log = [];
     }
@@ -1320,7 +1344,10 @@
             this.phase = this.data.phases.find((p) => p.id === e.id) ?? null;
             this.beats = this.phase ? beatsOf(this.phase.input) : [];
             this.phaseStart = e.atMs;
+            this.leftAt = null;
             this.marks = [];
+          } else if (this.phase && this.leftAt === null) {
+            this.leftAt = e.atMs - this.phaseStart;
           }
           break;
         case "judged": {
@@ -1328,22 +1355,44 @@
           if (!b) break;
           const color = GRADE_COLOR[e.grade];
           const hasInput = e.offsetMs !== null;
-          let label = hasInput ? fmtMs(e.offsetMs) : "MISS";
-          if (e.wrongDirection) label = `방향✗ ${label}`;
-          this.marks.push({ ms: hasInput ? b.targetMs + e.offsetMs : windowBounds(b).close, color, label, ignored: false });
-          const tag = e.beats > 1 ? `${e.phaseId}#${e.beat + 1}` : e.phaseId;
-          this.log.push({ text: `${tag} ${e.grade.toUpperCase()} ${label}`, color });
+          const ms = hasInput ? b.targetMs + e.offsetMs : windowBounds(b).close;
+          const tag = e.beats > 1 ? `#${e.beat + 1} ` : "";
+          const err = hasInput ? fmtMs(e.offsetMs) : "무입력";
+          this.addMark({ ms, color, label: hasInput ? fmtMs(e.offsetMs) : "MISS", ignored: false });
+          this.popup(ms, e.wrongDirection ? `${tag}방향 오류 ${err}` : hasInput ? `${tag}오차: ${err}` : `${tag}MISS (무입력)`, color);
+          this.log.push({ text: `${e.phaseId}${e.beats > 1 ? `#${e.beat + 1}` : ""} ${e.grade.toUpperCase()} ${err}`, color });
           if (this.log.length > MAX_LOG) this.log.shift();
           break;
         }
         case "inputIgnored":
-          if (this.phase && e.phaseId === this.phase.id && e.reason !== "repeat")
-            this.marks.push({ ms: e.seqMs, color: IGNORED, label: "×", ignored: true });
+          if (this.phase && e.phaseId === this.phase.id && e.reason !== "repeat") {
+            this.addMark({ ms: e.seqMs, color: IGNORED, label: "", ignored: true });
+            this.popup(e.seqMs, e.reason === "outside_window" ? "판정 구간 밖" : `무시(${e.reason})`, IGNORED);
+          }
           break;
         default:
           break;
       }
-      if (this.marks.length > MAX_MARKS) this.marks.splice(0, this.marks.length - MAX_MARKS);
+    }
+    addMark(m) {
+      this.marks.push(m);
+      if (this.marks.length > MAX_MARKS) this.marks.shift();
+    }
+    px(ms) {
+      const dur = this.phase?.durationMs ?? 1;
+      return Math.round(this.x + phaser_global_default.Math.Clamp(ms, 0, dur) / dur * this.w);
+    }
+    /** 입력 순간 마커 위로 떠오르는 오차 팝업 */
+    popup(ms, text, color) {
+      const t = this.scene.add.text(this.px(ms), this.barY - 10, text, {
+        ...font(10, hex(color)),
+        fontStyle: "bold",
+        stroke: "#000000",
+        strokeThickness: 3
+      }).setOrigin(0.5, 1);
+      this.layer.add(t);
+      this.scene.tweens.add({ targets: t, y: t.y - 18, duration: 900, ease: "Cubic.easeOut" });
+      this.scene.tweens.add({ targets: t, alpha: 0, delay: 500, duration: 400, onComplete: () => t.destroy() });
     }
     draw(state) {
       const { g, x, w, barY } = this;
@@ -1352,49 +1401,61 @@
       g.fillStyle(2565930).fillRect(0, this.y - 2, 640, 1);
       const p = this.phase;
       if (!p) {
-        this.title.setText("TIMING DEBUGGER — 우케 접근 대기");
-        this.clock.setText("");
+        this.title.setText("TIMING TIMELINE — 우케 접근 대기");
+        this.info.setText("칸 = 1프레임(16.7ms)  ■Early ■Perfect ■Late");
         this.markTexts.forEach((t) => t.setVisible(false));
         this.drawLog();
         return;
       }
       const dur = p.durationMs;
-      const px = (ms) => Math.round(x + phaser_global_default.Math.Clamp(ms, 0, dur) / dur * w);
-      const seg = (T, [a, b], c) => g.fillStyle(c, 0.85).fillRect(px(T + a), barY, Math.max(1, px(T + b) - px(T + a)), 10);
-      g.fillStyle(2565930).fillRect(x, barY, w, 10);
-      for (let t = 100; t < dur; t += 100) g.fillStyle(4144966).fillRect(px(t), barY, 1, 10);
-      for (const b of this.beats) {
-        seg(b.targetMs, b.window.early, GRADE_COLOR.early);
-        seg(b.targetMs, b.window.perfect, GRADE_COLOR.perfect);
-        seg(b.targetMs, b.window.late, GRADE_COLOR.late);
-        g.fillStyle(16777215).fillRect(px(b.targetMs), barY - 2, 1, 14);
-        if (b.type === "hold_release" && b.holdStartMaxMs !== void 0)
-          g.fillStyle(2282478, 0.6).fillRect(px(0), barY + 4, px(b.holdStartMaxMs) - px(0), 2);
-      }
       const live = state?.kind === "phase" && state.id === p.id;
-      const cur = live ? state.nowMs - this.phaseStart : null;
-      if (cur !== null) g.fillStyle(state?.hitstop ? 16777215 : 2282478).fillRect(px(cur) - 1, barY - 3, 2, 16);
-      this.markTexts.forEach((t) => t.setVisible(false));
-      let lastLabelX = -Infinity;
-      this.marks.forEach((m, i) => {
-        const mx = px(m.ms);
-        if (m.ignored) {
-          g.fillStyle(m.color).fillRect(mx, barY + 11, 1, 5);
-        } else {
-          g.fillStyle(m.color).fillTriangle(mx, barY + 11, mx - 3, barY + 17, mx + 3, barY + 17);
+      const cur = live ? state.nowMs - this.phaseStart : this.leftAt;
+      const curBeat = live ? state.beat?.index ?? -1 : -1;
+      const n = Math.ceil(dur / FRAME_MS);
+      const cw = w / n;
+      const gap = cw >= 4 ? 1 : 0;
+      for (let i = 0; i < n; i++) {
+        const z = zoneOf(this.beats, (i + 0.5) * FRAME_MS);
+        const past = cur !== null && i * FRAME_MS < cur;
+        const focus = !z || curBeat < 0 || z.beat === curBeat;
+        const alpha = past ? 1 : focus ? 0.45 : 0.2;
+        const cx = Math.round(x + i * cw);
+        g.fillStyle(z ? GRADE_COLOR[z.zone] : NONE, alpha).fillRect(cx + gap, barY, Math.max(1, Math.round(x + (i + 1) * cw) - cx - gap), 12);
+      }
+      if (cur !== null) {
+        const ci = Math.min(n - 1, Math.floor(cur / FRAME_MS));
+        g.lineStyle(1, state?.hitstop && live ? 16777215 : 2282478, 1).strokeRect(Math.round(x + ci * cw) + 0.5, barY - 1.5, Math.max(2, Math.round(cw)), 15);
+      }
+      g.fillStyle(1579035).fillRect(x, barY + 13, w, 2);
+      this.beats.forEach((b) => {
+        for (const zone of ["early", "perfect", "late"]) {
+          const [a, c] = b.window[zone];
+          g.fillStyle(GRADE_COLOR[zone]).fillRect(this.px(b.targetMs + a), barY + 13, Math.max(1, this.px(b.targetMs + c) - this.px(b.targetMs + a)), 2);
         }
-        const t = this.markTexts[i];
-        if (!m.ignored || mx - lastLabelX > 8) {
-          const row = mx - lastLabelX < 44 && !m.ignored ? 1 : 0;
-          t.setText(m.label).setColor(hex(m.color)).setPosition(mx, barY + 18 + row * 8).setVisible(true);
-          lastLabelX = mx;
-        }
+        g.fillStyle(16777215).fillRect(this.px(b.targetMs), barY - 3, 1, 19);
+        if (b.type === "hold_release" && b.holdStartMaxMs !== void 0)
+          g.fillStyle(2282478, 0.7).fillRect(this.px(0), barY + 5, this.px(b.holdStartMaxMs) - this.px(0), 2);
       });
-      const kind = input(p);
-      this.title.setText(`[${STAGE_LABEL[p.stage]}] ${p.label.ko}  ·  ${kind}`);
-      const shown = cur ?? (state?.kind === "phase" ? 0 : null);
-      const status = live ? "" : state?.kind ? `  → ${state.kind}:${state.id}` : "";
-      this.clock.setText(`${shown === null ? "—" : Math.round(shown)} / ${dur}ms${state?.hitstop ? "  HITSTOP" : ""}${status}`);
+      this.markTexts.forEach((t) => t.setVisible(false));
+      let lastX = -Infinity;
+      let row = 0;
+      this.marks.forEach((m, i) => {
+        const mx = this.px(m.ms);
+        const s = m.ignored ? 3 : 4;
+        g.fillStyle(m.color).fillTriangle(mx, barY - 1, mx - s, barY - 1 - s * 2, mx + s, barY - 1 - s * 2);
+        if (m.ignored) return;
+        row = mx - lastX < 40 ? 1 - row : 0;
+        this.markTexts[i].setText(m.label).setColor(hex(m.color)).setPosition(mx, barY + 16 + row * 8).setVisible(true);
+        lastX = mx;
+      });
+      const frame = cur === null ? "—" : String(Math.min(n, Math.floor(cur / FRAME_MS)));
+      const kind = p.input.type === "sequence" ? `연속 ×${this.beats.length}` : p.input.type;
+      this.title.setText(`[F ${frame}/${n}]  ${p.id} · ${p.label.ko} · ${kind}`);
+      const ib = this.beats[Math.max(0, Math.min(this.beats.length - 1, curBeat))];
+      const width = (r) => r[1] - r[0];
+      const win = ib ? `E ${width(ib.window.early)} · P ${width(ib.window.perfect)} · L ${width(ib.window.late)}ms  @${ib.targetMs}ms` : "입력 없음";
+      const tail = live ? state?.hitstop ? "  HITSTOP" : "" : state?.kind ? `  → ${state.kind}:${state.id}` : "";
+      this.info.setText(`${win}${tail}`);
       this.drawLog();
     }
     drawLog() {
@@ -1402,16 +1463,90 @@
       this.logTexts.forEach((t, i) => {
         const entry = this.log[i];
         if (!entry) return t.setVisible(false);
-        t.setText(entry.text).setColor(hex(entry.color)).setPosition(lx, this.y + 45).setVisible(true);
+        t.setText(entry.text).setColor(hex(entry.color)).setPosition(lx, this.y + 47).setVisible(true);
         lx += t.width + 12;
       });
     }
   };
-  var input = (p) => {
-    const i = p.input;
-    if (i.type === "none") return "입력 없음";
-    if (i.type === "sequence") return `연속 입력 ×${i.beats.length}`;
-    return i.type === "direction_press" ? `방향(${i.direction}) + ${i.button}` : i.type === "hold_release" ? `홀드→릴리즈 ${i.button}` : i.button;
+
+  // src/prototype/StateOverlay.ts
+  var MAX_LINES = 7;
+  var MAX_LOG2 = 6;
+  var LINE_H = 10;
+  var StateOverlay = class {
+    constructor(scene, layer, x = 6, y = 6) {
+      __publicField(this, "x", x);
+      __publicField(this, "y", y);
+      __publicField(this, "g");
+      __publicField(this, "lines", []);
+      __publicField(this, "logTexts", []);
+      __publicField(this, "header");
+      __publicField(this, "log", []);
+      const f = (color) => ({ fontFamily: FONT_FAMILY, fontSize: "9px", color });
+      this.g = scene.add.graphics();
+      for (let i = 0; i < MAX_LINES; i++) this.lines.push(scene.add.text(x + 4, y + 3 + i * LINE_H, "", f("#e4e4e7")));
+      const logY = y + 5 + MAX_LINES * LINE_H;
+      this.header = scene.add.text(x + 4, logY, "── STATE MACHINE LOG ──", f("#52525b"));
+      for (let i = 0; i < MAX_LOG2; i++) this.logTexts.push(scene.add.text(x + 4, logY + (i + 1) * LINE_H, "", f("#a1a1aa")));
+      layer.add([this.g, ...this.lines, this.header, ...this.logTexts]);
+    }
+    reset() {
+      this.log = [];
+    }
+    pushEvent(e) {
+      const t = `@${String(Math.round(e.atMs)).padStart(4, " ")}`;
+      let s = null;
+      switch (e.type) {
+        case "enter":
+          s = `ENTER ${e.kind}:${e.id}`;
+          break;
+        case "windowOpen":
+          s = `WINDOW ${e.phaseId}${e.beats > 1 ? `#${e.beat + 1}` : ""} open`;
+          break;
+        case "holdStart":
+          s = `HOLD ${e.phaseId}`;
+          break;
+        case "judged":
+          s = `JUDGE ${e.grade.toUpperCase()} ${e.offsetMs === null ? "no-input" : fmtMs(e.offsetMs)}`;
+          break;
+        case "resolved":
+          s = `RESOLVE ${e.result} → ${e.goto}`;
+          break;
+        case "hitstop":
+          s = `HITSTOP ${e.durationMs}ms`;
+          break;
+        case "ukemi":
+          s = `UKEMI ${e.result.toUpperCase()} (${e.successes}/${e.checks})`;
+          break;
+        case "end":
+          s = `END ${e.result.toUpperCase()}`;
+          break;
+        case "inputIgnored":
+          s = e.reason === "repeat" ? null : `IGNORED input (${e.reason})`;
+          break;
+        default:
+          break;
+      }
+      if (!s) return;
+      this.log.push(`${t} ${s}`);
+      if (this.log.length > MAX_LOG2) this.log.shift();
+    }
+    draw(lines) {
+      let maxW = 150;
+      this.lines.forEach((t, i) => {
+        const l = lines[i];
+        t.setText(l?.text ?? "").setColor(hex(l?.color ?? 15000807));
+        maxW = Math.max(maxW, t.width);
+      });
+      this.logTexts.forEach((t, i) => {
+        t.setText(this.log[i] ?? "");
+        maxW = Math.max(maxW, t.width);
+      });
+      const h = 8 + (MAX_LINES + 1 + MAX_LOG2) * LINE_H;
+      this.g.clear();
+      this.g.fillStyle(592139, 0.78).fillRect(this.x, this.y, maxW + 10, h);
+      this.g.fillStyle(4144966).fillRect(this.x, this.y, 2, h);
+    }
   };
 
   // src/prototype/PrototypeScene.ts
@@ -1424,20 +1559,34 @@
     bg: 1579035,
     floor: 5395035,
     mat: 2565930,
-    nage: 3900150,
-    nageLight: 9684477,
+    tori: 3900150,
+    toriLight: 9684477,
     uke: 15680580,
-    ukeLight: 16557477
+    ukeLight: 16557477,
+    origin: 16777215,
+    offset: 16638023,
+    dist: 2282478
   };
   var UKEMI_COLOR = { perfect: 2278750, sloppy: 16436245, crash: 15680580 };
-  var GRADE_TEXT = { perfect: "PERFECT", early: "EARLY", late: "LATE", miss: "MISS" };
-  var REACTION_TEXT = { whiff: "헛스윙!", hit: "피격!", clash: "충돌!", pushback: "밀려남" };
+  var JUDGE_FLOAT = {
+    perfect: "PERFECT!",
+    early: "TOO EARLY (연결 실패)",
+    late: "TOO LATE (거리 붕괴)",
+    miss: "MISS (무반응)"
+  };
+  var STAGE_NUM = { recognition: 1, entry: 2, throw: 3 };
+  var HP_MAX = 100;
   var SPEEDS = [1, 0.5, 0.25];
   var BODY_W = 16;
   var BODY_H = 40;
   var APPROACH_FROM = 260;
   var SNAP_MS = 1e3 / ANIM_FPS.DEFAULT;
   var MAAI_X = TECH.phases[0].tracks.uke[0].x ?? 80;
+  var ACTION_NAME = `${cap(TECH.attack)} › ${cap(TECH.technique)} ${cap(TECH.variant)}`;
+  function cap(s) {
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+  var signed = (n) => `${n >= 0 ? "+" : ""}${Math.round(n)}`;
   var easeCache = /* @__PURE__ */ new Map();
   var ease = (name) => {
     let f = easeCache.get(name);
@@ -1447,11 +1596,7 @@
     }
     return f;
   };
-  var bodyPose = (p) => {
-    if (/(ukemi_back|ukemi_sloppy|crash|down)$/.test(p.anim) && p.frame >= 2) return "lying";
-    if (/thrown$/.test(p.anim) && p.frame >= 3) return "lying";
-    return "stand";
-  };
+  var isLying = (p) => /(ukemi_back|ukemi_sloppy|crash|down)$/.test(p.anim) && p.frame >= 2 || /thrown$/.test(p.anim) && p.frame >= 3;
   var armPose = (p) => {
     if (/windup$/.test(p.anim)) return p.frame >= 1 ? "up" : "rest";
     if (/shomenuchi_strike$/.test(p.anim)) return p.frame <= 1 ? "up" : "strike";
@@ -1465,7 +1610,8 @@
       __publicField(this, "clock");
       __publicField(this, "engine", null);
       __publicField(this, "tracker");
-      __publicField(this, "dbg");
+      __publicField(this, "timeline");
+      __publicField(this, "overlay");
       __publicField(this, "state", null);
       __publicField(this, "mode", "ready");
       __publicField(this, "mirror", false);
@@ -1473,27 +1619,27 @@
       __publicField(this, "labels", true);
       __publicField(this, "speedIdx", 0);
       __publicField(this, "round", 0);
+      __publicField(this, "hp", HP_MAX);
       __publicField(this, "approach", { start: 0, speed: 0.15 });
       __publicField(this, "fx", []);
       __publicField(this, "push", null);
       __publicField(this, "branchLabel", null);
+      __publicField(this, "lastJudge", { text: "[LAST: —]", color: 7434618 });
+      __publicField(this, "panel", null);
       __publicField(this, "worldLayer");
       __publicField(this, "uiLayer");
       __publicField(this, "world");
+      __publicField(this, "debugG");
       __publicField(this, "fxG");
-      __publicField(this, "hudG");
-      __publicField(this, "overlay");
-      __publicField(this, "popup");
-      __publicField(this, "nageLabel");
+      __publicField(this, "uiG");
+      __publicField(this, "flashG");
+      __publicField(this, "toriLabel");
       __publicField(this, "ukeLabel");
-      __publicField(this, "maaiText");
-      __publicField(this, "hudLeft");
+      __publicField(this, "distText");
       __publicField(this, "hudRight");
-      __publicField(this, "stageTexts", []);
       __publicField(this, "phaseText");
       __publicField(this, "hintText");
-      __publicField(this, "panel");
-      __publicField(this, "centerText");
+      __publicField(this, "panelText");
     }
     create() {
       this.cameras.main.setBackgroundColor(C.bg);
@@ -1503,39 +1649,34 @@
       const uiCam = this.cameras.add(0, 0, GAME_WIDTH, GAME_HEIGHT);
       uiCam.ignore(this.worldLayer);
       this.cameras.main.ignore(this.uiLayer);
-      const font = (size, color = "#e4e4e7") => ({ fontFamily: FONT_FAMILY, fontSize: `${size}px`, color });
+      const font2 = (size, color = "#e4e4e7") => ({ fontFamily: FONT_FAMILY, fontSize: `${size}px`, color });
+      const outlined = { stroke: "#000000", strokeThickness: 3 };
       this.world = this.add.graphics();
+      this.debugG = this.add.graphics();
       this.fxG = this.add.graphics();
-      this.nageLabel = this.add.text(0, 0, "", font(8, "#93c5fd")).setOrigin(0.5, 1);
-      this.ukeLabel = this.add.text(0, 0, "", font(8, "#fca5a5")).setOrigin(0.5, 1);
-      this.maaiText = this.add.text(0, 0, "", font(9)).setOrigin(0.5, 1);
-      this.popup = this.add.text(GAME_WIDTH / 2, 118, "", {
-        ...font(22),
-        fontStyle: "bold",
-        align: "center",
-        stroke: "#000000",
-        strokeThickness: 4
-      }).setOrigin(0.5).setAlpha(0);
-      this.worldLayer.add([this.world, this.fxG, this.nageLabel, this.ukeLabel, this.maaiText, this.popup]);
-      this.hudG = this.add.graphics();
-      this.hudLeft = this.add.text(8, 6, "", font(10));
-      this.hudRight = this.add.text(GAME_WIDTH - 8, 6, "", font(9, "#a1a1aa")).setOrigin(1, 0);
-      const help = this.add.text(GAME_WIDTH - 8, 19, "Z 입력 · ←→ 방향 · R 재시작 · M 반전 · T 배속 · Q 스냅 · D 라벨", font(8, "#71717a")).setOrigin(1, 0);
-      this.stageTexts = ["① 인지", "② 진입", "③ 던지기"].map((s, i) => this.add.text(GAME_WIDTH / 2 + (i - 1) * 64, 34, s, font(10, "#52525b")).setOrigin(0.5, 0));
-      this.phaseText = this.add.text(GAME_WIDTH / 2, 50, "", font(12)).setOrigin(0.5, 0);
-      this.hintText = this.add.text(GAME_WIDTH / 2, 66, "", font(10, "#a1a1aa")).setOrigin(0.5, 0);
-      this.panel = this.add.rectangle(GAME_WIDTH / 2, 160, 420, 118, 592139, 0.88).setStrokeStyle(1, 4144966);
-      this.centerText = this.add.text(GAME_WIDTH / 2, 160, "", { ...font(11), align: "center", lineSpacing: 4 }).setOrigin(0.5);
-      this.overlay = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 16777215, 1).setOrigin(0).setAlpha(0);
-      this.uiLayer.add([this.hudG, this.hudLeft, this.hudRight, help, ...this.stageTexts, this.phaseText, this.hintText, this.panel, this.centerText, this.overlay]);
-      this.dbg = new TimingDebugger(this, TECH, this.uiLayer);
+      this.toriLabel = this.add.text(0, 0, "", { ...font2(8, "#93c5fd"), align: "center", ...outlined }).setOrigin(0.5, 1);
+      this.ukeLabel = this.add.text(0, 0, "", { ...font2(8, "#fca5a5"), align: "center", ...outlined }).setOrigin(0.5, 1);
+      this.distText = this.add.text(0, 0, "", { ...font2(9), fontStyle: "bold", ...outlined }).setOrigin(0.5, 1);
+      this.worldLayer.add([this.world, this.debugG, this.fxG, this.toriLabel, this.ukeLabel, this.distText]);
+      this.uiG = this.add.graphics();
+      this.hudRight = this.add.text(GAME_WIDTH - 8, 6, "", font2(9, "#a1a1aa")).setOrigin(1, 0);
+      const help = this.add.text(GAME_WIDTH - 8, 18, "Space 입력 · ←→ 방향 · R 재시작 · M 반전 · T 배속 · Q 스냅 · D 라벨", font2(8, "#71717a")).setOrigin(1, 0);
+      const legend = this.add.text(GAME_WIDTH - 8, 29, "+ Origin(트랙)  × 프레임 오프셋 적용점  ── 거리", font2(8, "#71717a")).setOrigin(1, 0);
+      this.phaseText = this.add.text(GAME_WIDTH / 2 + 60, 150, "", { ...font2(12), ...outlined }).setOrigin(0.5, 0);
+      this.hintText = this.add.text(GAME_WIDTH / 2 + 60, 166, "", { ...font2(10, "#a1a1aa"), ...outlined }).setOrigin(0.5, 0);
+      this.panelText = this.add.text(GAME_WIDTH / 2, 196, "", { ...font2(11), align: "center", lineSpacing: 4 }).setOrigin(0.5);
+      this.flashG = this.add.graphics().setAlpha(0);
+      this.uiLayer.add([this.uiG, this.hudRight, help, legend, this.phaseText, this.hintText, this.panelText]);
+      this.overlay = new StateOverlay(this, this.uiLayer);
+      this.timeline = new TimingDebugger(this, TECH, this.uiLayer);
+      this.uiLayer.add(this.flashG);
       this.tracker = new PoseTracker(TECH, ANIMS, ease);
       bindKeyboard(this, () => this.mode === "technique" ? this.engine : null, (t) => this.clock.toVirtual(t));
       const kb = this.input.keyboard;
       kb.on("keydown-ENTER", () => {
         if (this.mode === "ready" || this.mode === "result") this.startRound();
       });
-      kb.on("keydown-Z", () => {
+      kb.on("keydown-SPACE", () => {
         if (this.mode === "ready") this.startRound();
       });
       kb.on("keydown-R", () => this.startRound());
@@ -1561,7 +1702,7 @@
     }
     /** 콘솔/자동화 테스트용 스냅샷 */
     debugSnapshot() {
-      return { mode: this.mode, round: this.round, mirror: this.mirror, speed: SPEEDS[this.speedIdx], state: this.state };
+      return { mode: this.mode, round: this.round, hp: this.hpNow(), mirror: this.mirror, speed: SPEEDS[this.speedIdx], state: this.state };
     }
     update() {
       const now = this.vNow();
@@ -1585,35 +1726,40 @@
     originX() {
       return this.mirror ? 420 : 220;
     }
+    hpNow() {
+      return Math.max(0, this.hp - (this.mode === "result" ? 0 : this.state?.stats.damage ?? 0));
+    }
     showReady() {
       this.mode = "ready";
-      this.panel.setVisible(true);
-      this.centerText.setVisible(true).setColor("#e4e4e7").setText([
-        "AIKIDO TIMING PROTOTYPE",
-        `${TECH.name.ko}`,
-        "",
-        "Enter / Z : 시작",
-        "Z : 기술 입력   ← → : 방향 (텐칸 = 뒤쪽 + Z)",
-        "R 재시작 · M 좌우반전 · T 배속 · Q 스냅 · D 라벨"
-      ].join("\n"));
+      this.panel = {
+        color: 15000807,
+        lines: [
+          "AIKIDO TIMING — VISUAL DEBUG PROTOTYPE",
+          TECH.name.ko,
+          "",
+          "Space / Enter : 시작",
+          "Space : 기술 입력   ← → : 방향 (텐칸 = 뒤쪽 + Space)",
+          "R 재시작 · M 좌우반전 · T 배속 · Q 스냅 · D 라벨"
+        ]
+      };
       this.phaseText.setText("");
       this.hintText.setText("");
     }
     startRound() {
       this.round++;
+      if (this.hp <= 0) this.hp = HP_MAX;
       this.engine = new TimingEngine(TECH, { mirror: this.mirror });
       this.tracker.reset();
-      this.dbg.reset();
+      this.timeline.reset();
+      this.overlay.reset();
       this.state = null;
       this.fx = [];
       this.push = null;
       this.branchLabel = null;
+      this.panel = null;
+      this.lastJudge = { text: "[LAST: —]", color: 7434618 };
       this.mode = "approach";
       this.approach = { start: this.vNow(), speed: phaser_global_default.Math.FloatBetween(0.09, 0.2) };
-      this.panel.setVisible(false);
-      this.centerText.setVisible(false);
-      this.tweens.killTweensOf(this.popup);
-      this.popup.setAlpha(0);
       this.phaseText.setText("우케 접근 중 — 마아이를 읽어라").setColor("#a1a1aa");
       this.hintText.setText("");
     }
@@ -1621,7 +1767,8 @@
     handle(events) {
       for (const e of events) {
         this.tracker.onEvent(e);
-        this.dbg.onEvent(e);
+        this.timeline.onEvent(e);
+        this.overlay.pushEvent(e);
         switch (e.type) {
           case "enter":
             this.onEnter(e);
@@ -1638,9 +1785,14 @@
           case "fx":
             this.onFx(e);
             break;
-          case "ukemi":
-            this.showPopup(`낙법 ${e.result.toUpperCase()}`, UKEMI_COLOR[e.result], `Perfect ${e.successes}/${e.checks}`);
+          case "ukemi": {
+            const pose = this.tracker.poseAt(e.atMs);
+            if (pose) {
+              const u = this.anchorOf(pose.uke);
+              this.floatText(`UKEMI ${e.result.toUpperCase()}!`, u.x, u.top - 22, UKEMI_COLOR[e.result], 12);
+            }
             break;
+          }
           case "end":
             this.onEnd(e);
             break;
@@ -1660,6 +1812,11 @@
         if (b.result.damage) {
           this.flash(15680580, 0.3, 160);
           this.cameras.main.shake(this.real(180), 0.012);
+          const pose = this.tracker.poseAt(e.atMs);
+          if (pose) {
+            const n = this.anchorOf(pose.nage);
+            this.floatText(`-${b.result.damage} HP`, n.x + 18, n.top - 4, 15680580, 10);
+          }
         }
       } else {
         const u = TECH.ukemi.results[e.id];
@@ -1667,9 +1824,16 @@
       }
     }
     onJudged(e) {
-      const title = GRADE_TEXT[e.grade] + (e.beats > 1 ? ` ${e.beat + 1}/${e.beats}` : "");
-      const sub = e.wrongDirection ? "방향 틀림" : e.offsetMs === null ? "무입력" : fmtMs(e.offsetMs);
-      this.showPopup(title, GRADE_COLOR[e.grade], sub);
+      const color = GRADE_COLOR[e.grade];
+      const text = e.wrongDirection ? "WRONG WAY (방향 오류)" : JUDGE_FLOAT[e.grade];
+      const beat = e.beats > 1 ? ` ${e.beat + 1}/${e.beats}` : "";
+      const pose = this.tracker.poseAt(e.atMs);
+      if (pose) {
+        const n = this.anchorOf(pose.nage);
+        this.floatText(`${text}${beat}`, n.x, n.top - 22, color, e.grade === "perfect" ? 13 : 11);
+      }
+      const err = e.offsetMs === null ? "무입력" : fmtMs(e.offsetMs);
+      this.lastJudge = { text: `[LAST: ${e.phaseId}${e.beats > 1 ? `#${e.beat + 1}` : ""} ${e.grade.toUpperCase()} ${err}]`, color };
     }
     onReaction(e) {
       const pose = this.tracker.poseAt(e.atMs);
@@ -1677,9 +1841,8 @@
       const n = this.anchorOf(pose.nage);
       const u = this.anchorOf(pose.uke);
       const { type, px } = e.reaction;
-      this.floatText(`${REACTION_TEXT[type]}${px ? ` ${px}px` : ""}`, n.x, n.top - 14, type === "whiff" ? 16436245 : 16347926);
       const dir = pose.nage.facing * (this.mirror ? -1 : 1);
-      if (type === "whiff") this.fx.push({ kind: "ghost", x: n.x, y: n.top, start: e.atMs, dur: 220, color: C.nageLight, dir });
+      if (type === "whiff") this.fx.push({ kind: "ghost", x: n.x, y: n.y, start: e.atMs, dur: 220, color: C.toriLight, dir });
       if (type === "clash") {
         this.fx.push({ kind: "spark", x: (n.x + u.x) / 2, y: n.chest, start: e.atMs, dur: 220, color: 16347926, dir });
         this.cameras.main.shake(this.real(90), 6e-3);
@@ -1702,19 +1865,22 @@
       else this.fx.push({ kind: "ring", x: (n.x + u.x) / 2, y: n.chest, start: e.atMs, dur: 420, color: 2282478, dir });
     }
     onEnd(e) {
-      this.mode = "result";
       const s = e.stats;
+      this.hp = Math.max(0, this.hp - s.damage);
+      this.mode = "result";
       const ok = e.result === "success";
       const head = ok ? `기술 성공 — 낙법 ${e.ukemi?.toUpperCase() ?? ""}` : `실패 — ${this.branchLabel ?? ""}`;
-      this.panel.setVisible(true);
-      this.centerText.setVisible(true).setColor(ok && e.ukemi ? hex(UKEMI_COLOR[e.ukemi]) : "#f87171").setText([
-        head,
-        "",
-        `Perfect ${s.successes}/${s.checks}   Early ${s.grades.early}   Late ${s.grades.late}   Miss ${s.grades.miss}`,
-        `SCORE ${s.score}   MUSUBI ${s.musubi}   DMG ${s.damage}   최대 연속 ${s.maxStreak}`,
-        "",
-        "Enter / R : 다시   M : 좌우 반전   T : 배속"
-      ].join("\n"));
+      this.panel = {
+        color: ok && e.ukemi ? UKEMI_COLOR[e.ukemi] : 16281969,
+        lines: [
+          head,
+          "",
+          `Perfect ${s.successes}/${s.checks}   Early ${s.grades.early}   Late ${s.grades.late}   Miss ${s.grades.miss}`,
+          `SCORE ${s.score}   MUSUBI ${s.musubi}   HP ${this.hp}/${HP_MAX}${this.hp <= 0 ? "  (KO → 다음 라운드 회복)" : ""}`,
+          "",
+          "Enter / R : 다시   M : 좌우 반전   T : 배속"
+        ]
+      };
       this.hintText.setText("");
     }
     // ───────────────────────────── effects ─────────────────────────────
@@ -1723,27 +1889,24 @@
       return ms / Math.max(0.05, this.clock.scale);
     }
     flash(color, alpha, ms) {
-      this.tweens.killTweensOf(this.overlay);
-      this.overlay.setFillStyle(color, 1).setAlpha(alpha);
-      this.tweens.add({ targets: this.overlay, alpha: 0, duration: ms });
+      this.tweens.killTweensOf(this.flashG);
+      this.flashG.clear().fillStyle(color, 1).fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT).setAlpha(alpha);
+      this.tweens.add({ targets: this.flashG, alpha: 0, duration: ms });
     }
-    showPopup(text, color, sub = "") {
-      this.tweens.killTweensOf(this.popup);
-      this.popup.setText(sub ? `${text}
-${sub}` : text).setColor(hex(color)).setAlpha(1).setScale(1.5);
-      this.tweens.add({ targets: this.popup, scale: 1, duration: 120, ease: "Back.easeOut" });
-      this.tweens.add({ targets: this.popup, alpha: 0, delay: 650, duration: 250 });
-    }
-    floatText(text, x, y, color) {
+    /** 머리 위로 떠오르며 사라지는 텍스트 */
+    floatText(text, x, y, color, size = 11) {
       const t = this.add.text(x, y, text, {
         fontFamily: FONT_FAMILY,
-        fontSize: "10px",
+        fontSize: `${size}px`,
+        fontStyle: "bold",
         color: hex(color),
         stroke: "#000000",
         strokeThickness: 3
-      }).setOrigin(0.5, 1);
+      }).setOrigin(0.5, 1).setScale(1.3);
       this.worldLayer.add(t);
-      this.tweens.add({ targets: t, y: y - 14, alpha: 0, duration: 650, onComplete: () => t.destroy() });
+      this.tweens.add({ targets: t, scale: 1, duration: 120, ease: "Back.easeOut" });
+      this.tweens.add({ targets: t, y: y - 26, duration: 1e3, ease: "Cubic.easeOut" });
+      this.tweens.add({ targets: t, alpha: 0, delay: 600, duration: 400, onComplete: () => t.destroy() });
     }
     // ───────────────────────────── render ─────────────────────────────
     idlePose(now) {
@@ -1762,40 +1925,73 @@ ${sub}` : text).setColor(hex(color)).setAlpha(1).setScale(1.5);
       });
       return { nage: idle("common.nage.kamae", 0, 1), uke: idle("common.uke.kamae", ukeX, -1) };
     }
+    /** 기술 공간 포즈 → 화면 앵커. 프레임 오프셋(+x = 바라보는 방향)과 밀려남은 그리는 기준점에만 적용 */
     anchorOf(p, pushPx = 0) {
       const sign = this.mirror ? -1 : 1;
+      const rootX = Math.round(this.originX() + sign * p.x);
+      const rootY = Math.round(FLOOR_Y + p.y);
       const x = Math.round(this.originX() + sign * (p.x + p.offX * p.facing + pushPx));
-      const feet = Math.round(FLOOR_Y + p.y);
-      const h = bodyPose(p) === "lying" ? 12 : BODY_H - phaser_global_default.Math.Clamp(p.offY * 2, 0, 16);
-      return { x, top: feet - h - 10, chest: feet - Math.round(h * 0.65) };
+      const y = Math.round(FLOOR_Y + p.y + p.offY);
+      const h = isLying(p) ? 12 : BODY_H;
+      return { rootX, rootY, x, y, top: y - h - 10, chest: y - Math.round(h * 0.6) };
+    }
+    /** 1px 십자선 (+) */
+    crosshair(g, x, y, r, color) {
+      g.fillStyle(0, 0.8).fillRect(x - r - 1, y - 1, r * 2 + 3, 3).fillRect(x - 1, y - r - 1, 3, r * 2 + 3);
+      g.fillStyle(color, 1).fillRect(x - r, y, r * 2 + 1, 1).fillRect(x, y - r, 1, r * 2 + 1);
     }
     drawActor(p, body, light, hitstop, pushPx) {
       const g = this.world;
       const a = this.anchorOf(p, pushPx);
-      const feet = Math.round(FLOOR_Y + p.y);
       const fw = p.facing * (this.mirror ? -1 : 1);
-      g.fillStyle(0, 0.35).fillEllipse(a.x, FLOOR_Y + 1, 24, 4);
-      if (bodyPose(p) === "lying") {
-        g.fillStyle(body).fillRect(a.x - 20, feet - 12, 40, 12);
-        g.fillStyle(light).fillRect(fw > 0 ? a.x - 30 : a.x + 20, feet - 11, 10, 9);
-        if (hitstop) g.lineStyle(1, 16777215, 1).strokeRect(a.x - 31, feet - 13, 62, 14);
-        return a;
+      g.fillStyle(0, 0.35).fillEllipse(a.rootX, FLOOR_Y + 1, 24, 4);
+      if (isLying(p)) {
+        g.fillStyle(body).fillRect(a.x - 20, a.y - 12, 40, 12);
+        g.fillStyle(light).fillRect(fw > 0 ? a.x - 30 : a.x + 20, a.y - 11, 10, 9);
+        if (hitstop) g.lineStyle(1, 16777215, 1).strokeRect(a.x - 30.5, a.y - 12.5, 61, 13);
+      } else {
+        const bx = a.x - BODY_W / 2;
+        const by = a.y - BODY_H;
+        g.fillStyle(body).fillRect(bx, by, BODY_W, BODY_H);
+        g.fillStyle(light).fillRect(a.x - 5, by - 10, 10, 9);
+        const arm = armPose(p);
+        if (arm === "up") g.fillRect(a.x + fw * 4 - 2, by - 22, 4, 14);
+        else if (arm === "strike") g.fillRect(fw > 0 ? a.x + 8 : a.x - 26, by + 4, 18, 4);
+        else g.fillRect(fw > 0 ? a.x + 8 : a.x - 14, by + 10, 6, 4);
+        if (hitstop) g.lineStyle(1, 16777215, 1).strokeRect(bx - 0.5, by - 10.5, BODY_W + 1, BODY_H + 11);
       }
-      const h = feet - a.top - 10;
-      const bx = a.x - BODY_W / 2;
-      const by = feet - h;
-      g.fillStyle(body).fillRect(bx, by, BODY_W, h);
-      g.fillStyle(light).fillRect(a.x - 5, by - 10, 10, 9);
-      const arm = armPose(p);
-      if (arm === "up") g.fillRect(a.x + fw * 4 - 2, by - 22, 4, 14);
-      else if (arm === "strike") g.fillRect(fw > 0 ? a.x + 8 : a.x - 26, by + 4, 18, 4);
-      else g.fillRect(fw > 0 ? a.x + 8 : a.x - 14, by + 10, 6, 4);
-      if (hitstop) g.lineStyle(1, 16777215, 1).strokeRect(bx - 1, by - 11, BODY_W + 2, h + 12);
       return a;
+    }
+    /** Origin Point 십자선 + 프레임 오프셋 Δ (디버그 레이어: 캐릭터 위에 그림) */
+    drawOrigin(a, tint) {
+      const g = this.debugG;
+      const shifted = a.x !== a.rootX || a.y !== a.rootY;
+      if (shifted) {
+        g.lineStyle(1, C.offset, 0.9).lineBetween(a.rootX + 0.5, a.rootY + 0.5, a.x + 0.5, a.y + 0.5);
+        g.fillStyle(C.offset).fillRect(a.x - 2, a.y - 2, 1, 1).fillRect(a.x + 2, a.y - 2, 1, 1).fillRect(a.x - 1, a.y - 1, 3, 3).fillRect(a.x - 2, a.y + 2, 1, 1).fillRect(a.x + 2, a.y + 2, 1, 1);
+      }
+      this.crosshair(g, a.rootX, a.rootY, 6, C.origin);
+      g.fillStyle(tint).fillRect(a.rootX - 1, a.rootY - 1, 3, 3);
+    }
+    /** 두 Origin Point 를 잇는 거리선 + 실시간 px (마아이 범위: 초록=진입 가능, 노랑=근접, 회색=원거리) */
+    drawDistance(pose, n, u) {
+      const g = this.debugG;
+      const { minPx, maxPx } = TECH.requires.maai;
+      const dx = pose.uke.x - pose.nage.x;
+      const dy = pose.uke.y - pose.nage.y;
+      const d = Math.abs(dx);
+      const color = d < minPx ? 16436245 : d <= maxPx ? 2278750 : 9741240;
+      const ly = Math.min(n.rootY, u.rootY) - 20;
+      g.lineStyle(1, color, 0.5).lineBetween(n.rootX + 0.5, n.rootY - 6, n.rootX + 0.5, ly).lineBetween(u.rootX + 0.5, u.rootY - 6, u.rootX + 0.5, ly);
+      g.lineStyle(1, color, 1).lineBetween(n.rootX + 0.5, ly + 0.5, u.rootX + 0.5, ly + 0.5);
+      g.lineStyle(1, C.dist, 0.55).lineBetween(n.rootX + 0.5, n.rootY + 0.5, u.rootX + 0.5, u.rootY + 0.5);
+      const tag = d < minPx ? " 근접" : d <= maxPx ? " 마아이" : "";
+      this.distText.setPosition((n.rootX + u.rootX) / 2, ly - 1).setColor(hex(color)).setText(`${Math.round(d)}px${dy ? ` Δy${signed(dy)}` : ""}${tag}`);
     }
     render(now) {
       const g = this.world;
       g.clear();
+      this.debugG.clear();
       g.fillStyle(C.mat).fillRect(0, FLOOR_Y + 1, GAME_WIDTH, 3);
       g.fillStyle(C.floor).fillRect(0, FLOOR_Y, GAME_WIDTH, 1);
       const inTech = this.mode === "technique" || this.mode === "result";
@@ -1808,41 +2004,41 @@ ${sub}` : text).setColor(hex(color)).setAlpha(1).setScale(1.5);
         if (k >= 1) this.push = null;
         else pushPx = -this.push.px * (1 - Math.max(0, k)) * pose.nage.facing;
       }
-      this.drawMaai(pose, inTech);
-      const order = pose.nage.depth <= pose.uke.depth ? ["nage", "uke"] : ["uke", "nage"];
+      this.drawMaaiBand(pose, inTech);
+      const drawOrder = pose.nage.depth <= pose.uke.depth ? ["nage", "uke"] : ["uke", "nage"];
       const anchors = {};
-      for (const who of order) {
-        anchors[who] = who === "nage" ? this.drawActor(pose.nage, C.nage, C.nageLight, hs, pushPx) : this.drawActor(pose.uke, C.uke, C.ukeLight, hs, 0);
+      for (const who of drawOrder) {
+        anchors[who] = who === "nage" ? this.drawActor(pose.nage, C.tori, C.toriLight, hs, pushPx) : this.drawActor(pose.uke, C.uke, C.ukeLight, hs, 0);
       }
-      const label = (t, p, a) => t.setVisible(this.labels).setPosition(a.x, a.top - 2).setText(`${shortAnim(p.anim)}[${p.frame}]`);
-      label(this.nageLabel, pose.nage, anchors.nage);
-      label(this.ukeLabel, pose.uke, anchors.uke);
-      if (Math.abs(anchors.nage.x - anchors.uke.x) < 90) this.ukeLabel.setY(Math.min(anchors.uke.top, anchors.nage.top) - 12);
+      this.drawOrigin(anchors.nage, C.tori);
+      this.drawOrigin(anchors.uke, C.uke);
+      this.drawDistance(pose, anchors.nage, anchors.uke);
+      const label = (t, name, p, a, lift) => {
+        const off = p.offX || p.offY || name === "TORI" && pushPx ? `  Δ(${signed(p.offX + (name === "TORI" ? pushPx * p.facing : 0))},${signed(p.offY)})` : "";
+        t.setVisible(this.labels).setPosition(a.x, a.top - 2 - lift).setText(`${name} ${shortAnim(p.anim)}[${p.frame}]
+(${Math.round(p.x)},${Math.round(p.y)})${off}`);
+      };
+      label(this.toriLabel, "TORI", pose.nage, anchors.nage, 0);
+      const close = Math.abs(anchors.nage.x - anchors.uke.x) < 110;
+      label(this.ukeLabel, "UKE", pose.uke, anchors.uke, close ? Math.max(0, anchors.uke.top - anchors.nage.top) + 22 : 0);
       this.drawFx(inTech ? local : 0);
-      this.drawHud();
-      this.dbg.draw(inTech ? this.state : null);
+      this.drawUi();
+      this.timeline.draw(inTech ? this.state : null);
     }
-    /** 마아이 자: 접근 중 · 마아이 페이즈에서 거리와 진입 가능 범위 표시 */
-    drawMaai(pose, inTech) {
+    /** 접근 중 · 마아이 페이즈: 바닥에 진입 가능 범위(min~max)와 이상 거리 표시 */
+    drawMaaiBand(pose, inTech) {
       const show = this.mode === "ready" || this.mode === "approach" || inTech && this.state?.id === "maai";
-      this.maaiText.setVisible(show);
       if (!show) return;
       const g = this.world;
       const sign = this.mirror ? -1 : 1;
       const { minPx, idealPx, maxPx } = TECH.requires.maai;
       const nx = this.originX() + sign * pose.nage.x;
-      const ux = this.originX() + sign * pose.uke.x;
       const d = Math.abs(pose.uke.x - pose.nage.x);
       const ok = d >= minPx && d <= maxPx;
-      const bandA = nx + sign * minPx;
-      const bandB = nx + sign * maxPx;
-      g.fillStyle(2278750, ok ? 0.28 : 0.12).fillRect(Math.min(bandA, bandB), FLOOR_Y - 2, Math.abs(bandB - bandA), 2);
-      g.fillStyle(2278750, 0.6).fillRect(nx + sign * idealPx, FLOOR_Y - 4, 1, 4);
-      const y = FLOOR_Y - 62;
-      const col = ok ? 2278750 : 7434618;
-      g.fillStyle(col).fillRect(Math.min(nx, ux), y, Math.abs(ux - nx), 1);
-      g.fillRect(nx, y - 3, 1, 7).fillRect(ux, y - 3, 1, 7);
-      this.maaiText.setPosition((nx + ux) / 2, y - 2).setColor(hex(col)).setText(`마아이 ${Math.round(d)}px${ok ? " OK" : ""}`);
+      const a = nx + sign * minPx;
+      const b = nx + sign * maxPx;
+      g.fillStyle(2278750, ok ? 0.35 : 0.15).fillRect(Math.min(a, b), FLOOR_Y - 2, Math.abs(b - a), 2);
+      g.fillStyle(2278750, 0.7).fillRect(nx + sign * idealPx, FLOOR_Y - 5, 1, 5);
     }
     drawFx(t) {
       const g = this.fxG;
@@ -1861,35 +2057,74 @@ ${sub}` : text).setColor(hex(color)).setAlpha(1).setScale(1.5);
             g.lineBetween(f.x + Math.cos(ang) * r1, f.y + Math.sin(ang) * r1, f.x + Math.cos(ang) * r2, f.y + Math.sin(ang) * r2);
           }
         } else {
-          g.fillStyle(f.color, 0.45 * (1 - k)).fillRect(f.x - 8 + f.dir * (6 + k * 14), f.y + 10, BODY_W, BODY_H);
+          g.fillStyle(f.color, 0.45 * (1 - k)).fillRect(f.x - 8 + f.dir * (6 + k * 14), f.y - BODY_H, BODY_W, BODY_H);
         }
       }
     }
-    drawHud() {
-      const s = this.state?.stats;
-      this.hudLeft.setText(`ROUND ${this.round}   SCORE ${s?.score ?? 0}   DMG ${s?.damage ?? 0}`);
-      this.hudRight.setText(`x${SPEEDS[this.speedIdx]}  ${this.mirror ? "MIRROR" : "NORMAL"}  ${this.snappy ? "SNAP 10fps" : "SMOOTH"}`);
-      const g = this.hudG;
-      g.clear();
-      const musubi = s?.musubi ?? 50;
-      g.fillStyle(2565930).fillRect(8, 22, 110, 6);
-      g.fillStyle(2282478).fillRect(8, 22, Math.round(1.1 * musubi), 6);
-      g.fillStyle(5395035).fillRect(8 + 55, 21, 1, 8);
-      const stage = this.mode === "technique" || this.mode === "result" ? this.state?.stage ?? null : null;
-      const order = ["recognition", "entry", "throw"];
-      this.stageTexts.forEach((t, i) => t.setColor(stage === order[i] ? "#fafafa" : stage && order.indexOf(stage) > i ? "#71717a" : "#3f3f46"));
+    // ───────────────────────────── UI ─────────────────────────────
+    stateLine() {
       const st = this.state;
-      if (this.mode === "technique" && st?.kind === "phase") {
-        const p = TECH.phases.find((ph) => ph.id === st.id);
-        this.hintText.setText(this.hintFor(p, st.nageFacing));
-      } else if (this.mode === "technique") {
-        this.hintText.setText("");
+      switch (this.mode) {
+        case "ready":
+          return { text: "[STATE: Ready — Space 로 시작]", color: 10592682 };
+        case "approach":
+          return { text: "[STATE: Approach — 우케 접근 중]", color: 10592682 };
+        case "result":
+          return { text: `[STATE: Result — ${(st?.ended ?? "").toUpperCase()}]`, color: st?.ended === "success" ? 2278750 : 15680580 };
+        default:
+          break;
       }
+      if (!st?.kind) return { text: "[STATE: —]" };
+      const hs = st.hitstop ? " · HITSTOP" : "";
+      if (st.kind === "branch") return { text: `[STATE: Branch ${st.id}${hs}]`, color: 15680580 };
+      if (st.kind === "ukemi") return { text: `[STATE: Phase 3 Ukemi (${st.id})${hs}]`, color: UKEMI_COLOR[st.id] };
+      const b = st.beat;
+      const sub = !b || b.count === 0 ? "Observing" : b.resolved ? "Judged → Next" : b.holding ? "Holding" : b.windowOpen ? "Window Open" : "Waiting";
+      const color = sub === "Window Open" || sub === "Holding" ? 2278750 : sub === "Judged → Next" ? 2282478 : 16448250;
+      return { text: `[STATE: Phase ${STAGE_NUM[st.stage]} ${sub}${hs}]`, color: st.hitstop ? 16777215 : color };
+    }
+    drawUi() {
+      const st = this.state;
+      const s = st?.stats;
+      const hp = this.hpNow();
+      const phase = st?.kind === "phase" ? TECH.phases.find((p) => p.id === st.id) : void 0;
+      const b = st?.beat;
+      const beat = b && b.count ? `${Math.min(b.index + 1, b.count)}/${b.count}` : "—";
+      const t = st?.kind ? `${Math.round(st.seqMs)} / ${st.durationMs}ms  F${Math.floor(st.seqMs / FRAME_MS)}` : "—";
+      const pose = this.tracker.active && st ? this.tracker.poseAt(st.nowMs) : null;
+      const dist = pose ? Math.abs(pose.uke.x - pose.nage.x) : this.mode === "approach" || this.mode === "ready" ? Math.abs(this.idlePose(this.vNow()).uke.x) : 0;
+      const { minPx, idealPx, maxPx } = TECH.requires.maai;
+      this.overlay.draw([
+        this.stateLine(),
+        { text: `[ACTION: ${ACTION_NAME}${st?.id ? ` › ${st.id}` : ""}]` },
+        { text: `[HP: ${hp} / ${HP_MAX}]  [MUSUBI: ${s?.musubi ?? 50}]  [SCORE: ${s?.score ?? 0}]`, color: hp <= 30 ? 15680580 : 15000807 },
+        { text: `[BEAT: ${beat}]  [T: ${t}]` },
+        { text: `[MAAI: ${Math.round(dist)}px · ideal ${idealPx} (${minPx}~${maxPx})]`, color: dist >= minPx && dist <= maxPx ? 2278750 : 10592682 },
+        this.lastJudge,
+        { text: `[ROUND ${this.round}]  [INPUT: ${phase ? this.inputLabel(phase) : "—"}]`, color: 7434618 }
+      ]);
+      this.hudRight.setText(`x${SPEEDS[this.speedIdx]}  ${this.mirror ? "MIRROR" : "NORMAL"}  ${this.snappy ? "SNAP 10fps" : "SMOOTH"}`);
+      if (this.mode === "technique" && phase) this.hintText.setText(this.hintFor(phase, st.nageFacing));
+      else if (this.mode === "technique") this.hintText.setText("");
+      const g = this.uiG;
+      g.clear();
+      this.panelText.setVisible(!!this.panel);
+      if (this.panel) {
+        g.fillStyle(592139, 0.9).fillRect(GAME_WIDTH / 2 - 215, 142, 430, 108);
+        g.lineStyle(1, 4144966, 1).strokeRect(GAME_WIDTH / 2 - 214.5, 142.5, 429, 107);
+        this.panelText.setText(this.panel.lines.join("\n")).setColor(hex(this.panel.color));
+      }
+    }
+    inputLabel(p) {
+      const i = p.input;
+      if (i.type === "none") return "none";
+      if (i.type === "sequence") return `sequence ×${i.beats.length}`;
+      return i.type;
     }
     hintFor(p, facing) {
       const beats = beatsOf(p.input);
       if (!beats.length) return p.id === "maai" ? "공격을 읽어라 — 정면타 예비동작" : "";
-      const key = (b) => b.button === "ACTION" ? "Z" : "X";
+      const key = (b) => b.button === "ACTION" ? "Space" : "X";
       const one = (b) => b.type === "direction_press" ? `${this.arrow(b.direction, facing)} + ${key(b)}` : b.type === "hold_release" ? `${key(b)} 누르고 … 떼기` : key(b);
       const cue = beats[0].sync ? `   (${beats[0].sync.actor}:${beats[0].sync.event})` : "";
       return p.input.type === "sequence" ? `${one(beats[0])} ×${beats.length}  (리듬에 맞춰)` : `${one(beats[0])}${cue}`;

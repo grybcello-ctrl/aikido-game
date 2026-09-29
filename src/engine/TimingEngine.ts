@@ -83,6 +83,19 @@ export type EngineEvent =
 
 export type EngineListener = (e: EngineEvent) => void;
 
+/** 현재 페이즈의 비트 진행 상태 (디버그 오버레이용) */
+export interface BeatState {
+  /** 다음에 판정할 비트 인덱스 (count 와 같으면 모두 판정됨) */
+  index: number;
+  count: number;
+  /** 현재 비트 판정 구간이 열려 있음 */
+  windowOpen: boolean;
+  /** 페이즈 결과 확정 (전환 대기) */
+  resolved: boolean;
+  /** hold_release 누르고 있는 중 */
+  holding: boolean;
+}
+
 export interface EngineState {
   ended: 'success' | 'fail' | null;
   kind: RunKind | null;
@@ -98,6 +111,8 @@ export interface EngineState {
   /** 기술 공간 기준 nage facing (현재 시퀀스 시작 시점) */
   nageFacing: 1 | -1;
   hitstop: boolean;
+  /** phase 실행 중일 때만 */
+  beat: BeatState | null;
   ukemi: UkemiGrade | null;
   stats: TimingStats;
 }
@@ -234,6 +249,12 @@ export class TimingEngine {
       tracks: r ? tracksOf(r) : null,
       nageFacing: r?.inputFacing ?? this.nageFacing,
       hitstop: nowMs !== undefined && this.isFrozen(nowMs),
+      beat: r?.kind === 'phase'
+        ? {
+            index: r.beatIdx, count: r.beats.length, windowOpen: r.windowOpened,
+            resolved: r.resolved, holding: r.holdStart !== null,
+          }
+        : null,
       ukemi: this.ukemi,
       stats: cloneStats(this.stats),
     };

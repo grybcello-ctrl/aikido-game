@@ -1,4 +1,4 @@
-// 단일 HTML 프로토타입 빌드: src/prototype/main.ts → prototype/aikido-prototype.html
+// 단일 HTML 프로토타입 빌드: src/prototype/main.ts → prototype/index.html
 // Phaser 는 CDN(전역), 엔진·데이터·씬은 인라인 스크립트로 번들.
 // 사용: npm run build:prototype
 import { build } from 'esbuild';
@@ -48,7 +48,7 @@ ${js}
 </html>
 `;
 
-const out = join(root, 'prototype', 'aikido-prototype.html');
+const out = join(root, 'prototype', 'index.html');
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, html);
 console.log(`✓ ${out} (${(html.length / 1024).toFixed(1)} KB, phaser@${phaserVersion} via CDN)`);
