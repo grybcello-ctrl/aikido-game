@@ -1,4 +1,4 @@
-# aikido-engine
+# aikido-game
 
 아이키도 원리(마아이·무스비)를 담은 Phaser 3 타이밍 액션 게임의 데이터 주도 코어.
 

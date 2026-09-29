@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aikido-engine.local/schema/technique.schema.json",
+  "$id": "https://aikido-game.local/schema/technique.schema.json",
   "title": "Aikido Technique",
   "description": "기술(공격 × 기술 × 변형) 1개를 Phase 시퀀스로 정의한다. 좌표계: 기술 공간(technique space) — 원점은 기술 시작 시 nage의 발 기준점, +x는 시작 시 nage→uke 방향, +y는 아래(Phaser 기준). 플레이어가 화면 오른쪽에 있으면 엔진이 x에 -1을 곱해 미러링한다.",
   "type": "object",

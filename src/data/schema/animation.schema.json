@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aikido-engine.local/schema/animation.schema.json",
+  "$id": "https://aikido-game.local/schema/animation.schema.json",
   "title": "Animation Registry",
   "description": "스프라이트 애니메이션 정의. 공통(common.*) 레지스트리와 기술 전용(tech.<techId>.*) 정의가 동일한 animationDef를 사용한다.",
   "type": "object",

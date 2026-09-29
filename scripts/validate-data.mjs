@@ -11,8 +11,8 @@ const load = (p) => JSON.parse(readFileSync(join(root, p), 'utf8'));
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 ajv.addSchema(load('schema/animation.schema.json'));
 ajv.addSchema(load('schema/technique.schema.json'));
-const validateRegistry = ajv.getSchema('https://aikido-engine.local/schema/animation.schema.json');
-const validateTechnique = ajv.getSchema('https://aikido-engine.local/schema/technique.schema.json');
+const validateRegistry = ajv.getSchema('https://aikido-game.local/schema/animation.schema.json');
+const validateTechnique = ajv.getSchema('https://aikido-game.local/schema/technique.schema.json');
 
 let errors = 0;
 const fail = (file, msg) => { errors++; console.error(`  ✗ [${file}] ${msg}`); };
