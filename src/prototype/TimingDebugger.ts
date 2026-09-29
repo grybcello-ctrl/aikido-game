@@ -59,6 +59,7 @@ export class TimingDebugger {
   private log: { text: string; color: number }[] = [];
   private readonly barY: number;
   private lastPopup = { x: -999, at: 0, lift: 0 };
+  private popups: Phaser.GameObjects.Text[] = [];
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -77,7 +78,13 @@ export class TimingDebugger {
     layer.add([this.g, this.title, this.info, ...this.markTexts, ...this.logTexts]);
   }
 
+  private clearPopups(): void {
+    this.popups.forEach((t) => { this.scene.tweens.killTweensOf(t); t.destroy(); });
+    this.popups = [];
+  }
+
   reset(): void {
+    this.clearPopups();
     this.phase = null;
     this.beats = [];
     this.leftAt = null;
@@ -94,6 +101,7 @@ export class TimingDebugger {
           this.phaseStart = e.atMs;
           this.leftAt = null;
           this.marks = [];
+          this.clearPopups(); // 이전 페이즈 팝업이 새 막대 위에 남지 않게
         } else if (this.phase && this.leftAt === null) {
           this.leftAt = e.atMs - this.phaseStart; // 분기/낙법으로 넘어가도 마지막 페이즈 막대 유지
         }
@@ -144,8 +152,12 @@ export class TimingDebugger {
       ...font(10, hex(color)), fontStyle: 'bold', stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5, 1);
     this.layer.add(t);
+    this.popups.push(t);
     this.scene.tweens.add({ targets: t, y: t.y - 18, duration: 900, ease: 'Cubic.easeOut' });
-    this.scene.tweens.add({ targets: t, alpha: 0, delay: 500, duration: 400, onComplete: () => t.destroy() });
+    this.scene.tweens.add({
+      targets: t, alpha: 0, delay: 500, duration: 400,
+      onComplete: () => { this.popups = this.popups.filter((p) => p !== t); t.destroy(); },
+    });
   }
 
   draw(state: EngineState | null): void {
@@ -200,14 +212,12 @@ export class TimingDebugger {
     // ── 입력 마커 ▼ ──
     this.markTexts.forEach((t) => t.setVisible(false));
     let lastX = -Infinity;
-    let row = 0;
     this.marks.forEach((m, i) => {
       const mx = this.px(m.ms);
       const s = m.ignored ? 3 : 4;
       g.fillStyle(m.color).fillTriangle(mx, barY - 1, mx - s, barY - 1 - s * 2, mx + s, barY - 1 - s * 2);
-      if (m.ignored) return;
-      row = mx - lastX < 40 ? 1 - row : 0; // 가까운 라벨은 줄 바꿈
-      this.markTexts[i].setText(m.label).setColor(hex(m.color)).setPosition(mx, barY + 16 + row * 8).setVisible(true);
+      if (m.ignored || mx - lastX < 44) return; // 가까우면 생략 (팝업·로그에 값이 남음)
+      this.markTexts[i].setText(m.label).setColor(hex(m.color)).setPosition(mx, barY + 16).setVisible(true);
       lastX = mx;
     });
 

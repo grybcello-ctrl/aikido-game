@@ -110,8 +110,8 @@ export class PrototypeScene extends Phaser.Scene {
   private branchLabel: string | null = null;
   private lastJudge: OverlayLine = { text: '[LAST: —]', color: 0x71717a };
   private panel: { lines: string[]; color: number } | null = null;
-  /** 살아있는 플로팅 텍스트 수 → 새 텍스트를 위로 쌓아 겹침 방지 */
-  private floats = 0;
+  /** 머리 위 플로팅 텍스트 (최신이 아래, 이전 것은 한 칸씩 위로 밀려 겹치지 않음) */
+  private floats: { t: Phaser.GameObjects.Text; x: number; y: number; born: number }[] = [];
 
   private worldLayer!: Phaser.GameObjects.Layer;
   private uiLayer!: Phaser.GameObjects.Layer;
@@ -151,7 +151,7 @@ export class PrototypeScene extends Phaser.Scene {
     this.fxG = this.add.graphics();
     this.toriLabel = this.add.text(0, 0, '', { ...font(8, '#93c5fd'), align: 'center', ...outlined }).setOrigin(0.5, 1);
     this.ukeLabel = this.add.text(0, 0, '', { ...font(8, '#fca5a5'), align: 'center', ...outlined }).setOrigin(0.5, 1);
-    this.distText = this.add.text(0, 0, '', { ...font(9), fontStyle: 'bold', ...outlined }).setOrigin(0.5, 1);
+    this.distText = this.add.text(0, 0, '', { ...font(9), fontStyle: 'bold', backgroundColor: 'rgba(0,0,0,0.65)', padding: { x: 2, y: 0 } }).setOrigin(0.5, 1);
     this.worldLayer.add([this.world, this.debugG, this.fxG, this.toriLabel, this.ukeLabel, this.distText]);
 
     this.uiG = this.add.graphics();
@@ -257,7 +257,8 @@ export class PrototypeScene extends Phaser.Scene {
     this.push = null;
     this.branchLabel = null;
     this.panel = null;
-    this.floats = 0;
+    this.floats.forEach((f) => f.t.destroy());
+    this.floats = [];
     this.lastJudge = { text: '[LAST: —]', color: 0x71717a };
     this.mode = 'approach';
     this.approach = { start: this.vNow(), speed: Phaser.Math.FloatBetween(0.09, 0.2) };
@@ -394,19 +395,32 @@ export class PrototypeScene extends Phaser.Scene {
     this.tweens.add({ targets: this.flashG, alpha: 0, duration: ms });
   }
 
-  /** 머리 위로 떠오르며 사라지는 텍스트 */
+  /** 머리 위로 떠오르며 사라지는 텍스트 (위치·투명도는 updateFloats 에서 매 프레임 계산) */
   private floatText(text: string, x: number, y: number, color: number, size = 11): void {
-    // 캐릭터 라벨 위에서 시작, 이전 텍스트가 남아 있으면 한 칸씩 위로
     const labelTop = this.labels ? Math.min(this.toriLabel.y - this.toriLabel.height, this.ukeLabel.y - this.ukeLabel.height) - 2 : y;
-    y = Math.min(y, labelTop) - this.floats * 14;
-    this.floats++;
     const t = this.add.text(x, y, text, {
       fontFamily: FONT_FAMILY, fontSize: `${size}px`, fontStyle: 'bold', color: hex(color), stroke: '#000000', strokeThickness: 3,
-    }).setOrigin(0.5, 1).setScale(1.3);
+    }).setOrigin(0.5, 1);
     this.worldLayer.add(t);
-    this.tweens.add({ targets: t, scale: 1, duration: 120, ease: 'Back.easeOut' });
-    this.tweens.add({ targets: t, y: y - 26, duration: 1000, ease: 'Cubic.easeOut' });
-    this.tweens.add({ targets: t, alpha: 0, delay: 600, duration: 400, onComplete: () => { t.destroy(); this.floats = Math.max(0, this.floats - 1); } });
+    this.floats.unshift({ t, x, y: Math.max(172, Math.min(y, labelTop)), born: this.vNow() });
+  }
+
+  private updateFloats(now: number): void {
+    const LIFE = 1100;
+    this.floats = this.floats.filter((f) => {
+      const age = now - f.born;
+      if (age < LIFE) return true;
+      f.t.destroy();
+      return false;
+    });
+    this.floats.forEach((f, i) => {
+      const age = now - f.born;
+      const k = Math.min(1, age / LIFE);
+      const rise = (1 - (1 - k) ** 3) * 22;
+      f.t.setPosition(f.x, Math.round(f.y - rise - i * 14))
+        .setScale(age < 120 ? 1.3 - (age / 120) * 0.3 : 1)
+        .setAlpha(age > 650 ? 1 - (age - 650) / (LIFE - 650) : 1);
+    });
   }
 
   // ───────────────────────────── render ─────────────────────────────
@@ -535,6 +549,7 @@ export class PrototypeScene extends Phaser.Scene {
     label(this.ukeLabel, 'UKE', pose.uke, anchors.uke, close ? Math.max(0, anchors.uke.top - anchors.nage.top) + 22 : 0);
 
     this.drawFx(inTech ? local : 0);
+    this.updateFloats(now);
     this.drawUi();
     this.timeline.draw(inTech ? this.state : null);
   }

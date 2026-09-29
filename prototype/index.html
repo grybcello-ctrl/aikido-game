@@ -1323,6 +1323,7 @@
       __publicField(this, "log", []);
       __publicField(this, "barY");
       __publicField(this, "lastPopup", { x: -999, at: 0, lift: 0 });
+      __publicField(this, "popups", []);
       this.barY = y + 21;
       this.g = scene.add.graphics();
       this.title = scene.add.text(x, y + 2, "", font(9));
@@ -1331,7 +1332,15 @@
       for (let i = 0; i < MAX_LOG; i++) this.logTexts.push(scene.add.text(0, y + 47, "", font(9)));
       layer.add([this.g, this.title, this.info, ...this.markTexts, ...this.logTexts]);
     }
+    clearPopups() {
+      this.popups.forEach((t) => {
+        this.scene.tweens.killTweensOf(t);
+        t.destroy();
+      });
+      this.popups = [];
+    }
     reset() {
+      this.clearPopups();
       this.phase = null;
       this.beats = [];
       this.leftAt = null;
@@ -1347,6 +1356,7 @@
             this.phaseStart = e.atMs;
             this.leftAt = null;
             this.marks = [];
+            this.clearPopups();
           } else if (this.phase && this.leftAt === null) {
             this.leftAt = e.atMs - this.phaseStart;
           }
@@ -1396,8 +1406,18 @@
         strokeThickness: 3
       }).setOrigin(0.5, 1);
       this.layer.add(t);
+      this.popups.push(t);
       this.scene.tweens.add({ targets: t, y: t.y - 18, duration: 900, ease: "Cubic.easeOut" });
-      this.scene.tweens.add({ targets: t, alpha: 0, delay: 500, duration: 400, onComplete: () => t.destroy() });
+      this.scene.tweens.add({
+        targets: t,
+        alpha: 0,
+        delay: 500,
+        duration: 400,
+        onComplete: () => {
+          this.popups = this.popups.filter((p) => p !== t);
+          t.destroy();
+        }
+      });
     }
     draw(state) {
       const { g, x, w, barY } = this;
@@ -1443,14 +1463,12 @@
       });
       this.markTexts.forEach((t) => t.setVisible(false));
       let lastX = -Infinity;
-      let row = 0;
       this.marks.forEach((m, i) => {
         const mx = this.px(m.ms);
         const s = m.ignored ? 3 : 4;
         g.fillStyle(m.color).fillTriangle(mx, barY - 1, mx - s, barY - 1 - s * 2, mx + s, barY - 1 - s * 2);
-        if (m.ignored) return;
-        row = mx - lastX < 40 ? 1 - row : 0;
-        this.markTexts[i].setText(m.label).setColor(hex(m.color)).setPosition(mx, barY + 16 + row * 8).setVisible(true);
+        if (m.ignored || mx - lastX < 44) return;
+        this.markTexts[i].setText(m.label).setColor(hex(m.color)).setPosition(mx, barY + 16).setVisible(true);
         lastX = mx;
       });
       const frame = cur === null ? "—" : String(Math.min(n, Math.floor(cur / FRAME_MS)));
@@ -1631,8 +1649,8 @@
       __publicField(this, "branchLabel", null);
       __publicField(this, "lastJudge", { text: "[LAST: —]", color: 7434618 });
       __publicField(this, "panel", null);
-      /** 살아있는 플로팅 텍스트 수 → 새 텍스트를 위로 쌓아 겹침 방지 */
-      __publicField(this, "floats", 0);
+      /** 머리 위 플로팅 텍스트 (최신이 아래, 이전 것은 한 칸씩 위로 밀려 겹치지 않음) */
+      __publicField(this, "floats", []);
       __publicField(this, "worldLayer");
       __publicField(this, "uiLayer");
       __publicField(this, "world");
@@ -1663,7 +1681,7 @@
       this.fxG = this.add.graphics();
       this.toriLabel = this.add.text(0, 0, "", { ...font2(8, "#93c5fd"), align: "center", ...outlined }).setOrigin(0.5, 1);
       this.ukeLabel = this.add.text(0, 0, "", { ...font2(8, "#fca5a5"), align: "center", ...outlined }).setOrigin(0.5, 1);
-      this.distText = this.add.text(0, 0, "", { ...font2(9), fontStyle: "bold", ...outlined }).setOrigin(0.5, 1);
+      this.distText = this.add.text(0, 0, "", { ...font2(9), fontStyle: "bold", backgroundColor: "rgba(0,0,0,0.65)", padding: { x: 2, y: 0 } }).setOrigin(0.5, 1);
       this.worldLayer.add([this.world, this.debugG, this.fxG, this.toriLabel, this.ukeLabel, this.distText]);
       this.uiG = this.add.graphics();
       this.hudRight = this.add.text(GAME_WIDTH - 8, 6, "", font2(9, "#a1a1aa")).setOrigin(1, 0);
@@ -1764,7 +1782,8 @@
       this.push = null;
       this.branchLabel = null;
       this.panel = null;
-      this.floats = 0;
+      this.floats.forEach((f) => f.t.destroy());
+      this.floats = [];
       this.lastJudge = { text: "[LAST: —]", color: 7434618 };
       this.mode = "approach";
       this.approach = { start: this.vNow(), speed: phaser_global_default.Math.FloatBetween(0.09, 0.2) };
@@ -1901,11 +1920,9 @@
       this.flashG.clear().fillStyle(color, 1).fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT).setAlpha(alpha);
       this.tweens.add({ targets: this.flashG, alpha: 0, duration: ms });
     }
-    /** 머리 위로 떠오르며 사라지는 텍스트 */
+    /** 머리 위로 떠오르며 사라지는 텍스트 (위치·투명도는 updateFloats 에서 매 프레임 계산) */
     floatText(text, x, y, color, size = 11) {
       const labelTop = this.labels ? Math.min(this.toriLabel.y - this.toriLabel.height, this.ukeLabel.y - this.ukeLabel.height) - 2 : y;
-      y = Math.min(y, labelTop) - this.floats * 14;
-      this.floats++;
       const t = this.add.text(x, y, text, {
         fontFamily: FONT_FAMILY,
         fontSize: `${size}px`,
@@ -1913,14 +1930,24 @@
         color: hex(color),
         stroke: "#000000",
         strokeThickness: 3
-      }).setOrigin(0.5, 1).setScale(1.3);
+      }).setOrigin(0.5, 1);
       this.worldLayer.add(t);
-      this.tweens.add({ targets: t, scale: 1, duration: 120, ease: "Back.easeOut" });
-      this.tweens.add({ targets: t, y: y - 26, duration: 1e3, ease: "Cubic.easeOut" });
-      this.tweens.add({ targets: t, alpha: 0, delay: 600, duration: 400, onComplete: () => {
-        t.destroy();
-        this.floats = Math.max(0, this.floats - 1);
-      } });
+      this.floats.unshift({ t, x, y: Math.max(172, Math.min(y, labelTop)), born: this.vNow() });
+    }
+    updateFloats(now) {
+      const LIFE = 1100;
+      this.floats = this.floats.filter((f) => {
+        const age = now - f.born;
+        if (age < LIFE) return true;
+        f.t.destroy();
+        return false;
+      });
+      this.floats.forEach((f, i) => {
+        const age = now - f.born;
+        const k = Math.min(1, age / LIFE);
+        const rise = (1 - (1 - k) ** 3) * 22;
+        f.t.setPosition(f.x, Math.round(f.y - rise - i * 14)).setScale(age < 120 ? 1.3 - age / 120 * 0.3 : 1).setAlpha(age > 650 ? 1 - (age - 650) / (LIFE - 650) : 1);
+      });
     }
     // ───────────────────────────── render ─────────────────────────────
     idlePose(now) {
@@ -2036,6 +2063,7 @@
       const close = Math.abs(anchors.nage.x - anchors.uke.x) < 110;
       label(this.ukeLabel, "UKE", pose.uke, anchors.uke, close ? Math.max(0, anchors.uke.top - anchors.nage.top) + 22 : 0);
       this.drawFx(inTech ? local : 0);
+      this.updateFloats(now);
       this.drawUi();
       this.timeline.draw(inTech ? this.state : null);
     }
