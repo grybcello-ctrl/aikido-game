@@ -16,7 +16,8 @@
 
 ## 프로토타입 실행
 
-- 바로 플레이: [aikido-prototype.html (raw.githack)](https://raw.githack.com/grybcello-ctrl/aikido-game/main/prototype/aikido-prototype.html) 또는 파일을 받아 브라우저로 열기
+- 바로 플레이: `prototype/aikido-prototype.html` 파일을 받아 브라우저로 열기 (더블클릭, 인터넷 연결 필요: Phaser·폰트 CDN)
+  - 또는 [raw.githack 링크](https://raw.githack.com/grybcello-ctrl/aikido-game/main/prototype/aikido-prototype.html) — 첫 방문 시 githack 안내 페이지를 한 번 통과해야 함
 - 개발 서버: `npm run dev` → http://localhost:5173
 - 단일 HTML 재생성: `npm run build:prototype`
 
