@@ -29,7 +29,7 @@
   // src/config/gameConfig.ts
   var GAME_WIDTH = 640;
   var GAME_HEIGHT = 360;
-  var FLOOR_Y = 300;
+  var FLOOR_Y = 276;
   var createGameConfig = (scenes = [], parent = "game") => ({
     type: phaser_global_default.AUTO,
     parent,
@@ -1322,6 +1322,7 @@
       __publicField(this, "marks", []);
       __publicField(this, "log", []);
       __publicField(this, "barY");
+      __publicField(this, "lastPopup", { x: -999, at: 0, lift: 0 });
       this.barY = y + 21;
       this.g = scene.add.graphics();
       this.title = scene.add.text(x, y + 2, "", font(9));
@@ -1384,7 +1385,11 @@
     }
     /** 입력 순간 마커 위로 떠오르는 오차 팝업 */
     popup(ms, text, color) {
-      const t = this.scene.add.text(this.px(ms), this.barY - 10, text, {
+      const x = this.px(ms);
+      const now = this.scene.time.now;
+      const lift = Math.abs(x - this.lastPopup.x) < 110 && now - this.lastPopup.at < 900 ? (this.lastPopup.lift + 1) % 3 : 0;
+      this.lastPopup = { x, at: now, lift };
+      const t = this.scene.add.text(x, this.barY - 10 - lift * 12, text, {
         ...font(10, hex(color)),
         fontStyle: "bold",
         stroke: "#000000",
@@ -1626,6 +1631,8 @@
       __publicField(this, "branchLabel", null);
       __publicField(this, "lastJudge", { text: "[LAST: —]", color: 7434618 });
       __publicField(this, "panel", null);
+      /** 살아있는 플로팅 텍스트 수 → 새 텍스트를 위로 쌓아 겹침 방지 */
+      __publicField(this, "floats", 0);
       __publicField(this, "worldLayer");
       __publicField(this, "uiLayer");
       __publicField(this, "world");
@@ -1662,8 +1669,8 @@
       this.hudRight = this.add.text(GAME_WIDTH - 8, 6, "", font2(9, "#a1a1aa")).setOrigin(1, 0);
       const help = this.add.text(GAME_WIDTH - 8, 18, "Space 입력 · ←→ 방향 · R 재시작 · M 반전 · T 배속 · Q 스냅 · D 라벨", font2(8, "#71717a")).setOrigin(1, 0);
       const legend = this.add.text(GAME_WIDTH - 8, 29, "+ Origin(트랙)  × 프레임 오프셋 적용점  ── 거리", font2(8, "#71717a")).setOrigin(1, 0);
-      this.phaseText = this.add.text(GAME_WIDTH / 2 + 60, 150, "", { ...font2(12), ...outlined }).setOrigin(0.5, 0);
-      this.hintText = this.add.text(GAME_WIDTH / 2 + 60, 166, "", { ...font2(10, "#a1a1aa"), ...outlined }).setOrigin(0.5, 0);
+      this.phaseText = this.add.text(GAME_WIDTH - 8, 44, "", { ...font2(12), ...outlined }).setOrigin(1, 0);
+      this.hintText = this.add.text(GAME_WIDTH - 8, 60, "", { ...font2(10, "#a1a1aa"), ...outlined }).setOrigin(1, 0);
       this.panelText = this.add.text(GAME_WIDTH / 2, 196, "", { ...font2(11), align: "center", lineSpacing: 4 }).setOrigin(0.5);
       this.flashG = this.add.graphics().setAlpha(0);
       this.uiLayer.add([this.uiG, this.hudRight, help, legend, this.phaseText, this.hintText, this.panelText]);
@@ -1757,6 +1764,7 @@
       this.push = null;
       this.branchLabel = null;
       this.panel = null;
+      this.floats = 0;
       this.lastJudge = { text: "[LAST: —]", color: 7434618 };
       this.mode = "approach";
       this.approach = { start: this.vNow(), speed: phaser_global_default.Math.FloatBetween(0.09, 0.2) };
@@ -1895,6 +1903,9 @@
     }
     /** 머리 위로 떠오르며 사라지는 텍스트 */
     floatText(text, x, y, color, size = 11) {
+      const labelTop = this.labels ? Math.min(this.toriLabel.y - this.toriLabel.height, this.ukeLabel.y - this.ukeLabel.height) - 2 : y;
+      y = Math.min(y, labelTop) - this.floats * 14;
+      this.floats++;
       const t = this.add.text(x, y, text, {
         fontFamily: FONT_FAMILY,
         fontSize: `${size}px`,
@@ -1906,7 +1917,10 @@
       this.worldLayer.add(t);
       this.tweens.add({ targets: t, scale: 1, duration: 120, ease: "Back.easeOut" });
       this.tweens.add({ targets: t, y: y - 26, duration: 1e3, ease: "Cubic.easeOut" });
-      this.tweens.add({ targets: t, alpha: 0, delay: 600, duration: 400, onComplete: () => t.destroy() });
+      this.tweens.add({ targets: t, alpha: 0, delay: 600, duration: 400, onComplete: () => {
+        t.destroy();
+        this.floats--;
+      } });
     }
     // ───────────────────────────── render ─────────────────────────────
     idlePose(now) {
@@ -2109,6 +2123,8 @@
       const g = this.uiG;
       g.clear();
       this.panelText.setVisible(!!this.panel);
+      this.phaseText.setVisible(!this.panel);
+      this.hintText.setVisible(!this.panel);
       if (this.panel) {
         g.fillStyle(592139, 0.9).fillRect(GAME_WIDTH / 2 - 215, 142, 430, 108);
         g.lineStyle(1, 4144966, 1).strokeRect(GAME_WIDTH / 2 - 214.5, 142.5, 429, 107);

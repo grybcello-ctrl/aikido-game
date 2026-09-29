@@ -110,6 +110,8 @@ export class PrototypeScene extends Phaser.Scene {
   private branchLabel: string | null = null;
   private lastJudge: OverlayLine = { text: '[LAST: —]', color: 0x71717a };
   private panel: { lines: string[]; color: number } | null = null;
+  /** 살아있는 플로팅 텍스트 수 → 새 텍스트를 위로 쌓아 겹침 방지 */
+  private floats = 0;
 
   private worldLayer!: Phaser.GameObjects.Layer;
   private uiLayer!: Phaser.GameObjects.Layer;
@@ -156,8 +158,8 @@ export class PrototypeScene extends Phaser.Scene {
     this.hudRight = this.add.text(GAME_WIDTH - 8, 6, '', font(9, '#a1a1aa')).setOrigin(1, 0);
     const help = this.add.text(GAME_WIDTH - 8, 18, 'Space 입력 · ←→ 방향 · R 재시작 · M 반전 · T 배속 · Q 스냅 · D 라벨', font(8, '#71717a')).setOrigin(1, 0);
     const legend = this.add.text(GAME_WIDTH - 8, 29, '+ Origin(트랙)  × 프레임 오프셋 적용점  ── 거리', font(8, '#71717a')).setOrigin(1, 0);
-    this.phaseText = this.add.text(GAME_WIDTH / 2 + 60, 150, '', { ...font(12), ...outlined }).setOrigin(0.5, 0);
-    this.hintText = this.add.text(GAME_WIDTH / 2 + 60, 166, '', { ...font(10, '#a1a1aa'), ...outlined }).setOrigin(0.5, 0);
+    this.phaseText = this.add.text(GAME_WIDTH - 8, 44, '', { ...font(12), ...outlined }).setOrigin(1, 0);
+    this.hintText = this.add.text(GAME_WIDTH - 8, 60, '', { ...font(10, '#a1a1aa'), ...outlined }).setOrigin(1, 0);
     this.panelText = this.add.text(GAME_WIDTH / 2, 196, '', { ...font(11), align: 'center', lineSpacing: 4 }).setOrigin(0.5);
     this.flashG = this.add.graphics().setAlpha(0);
     this.uiLayer.add([this.uiG, this.hudRight, help, legend, this.phaseText, this.hintText, this.panelText]);
@@ -255,6 +257,7 @@ export class PrototypeScene extends Phaser.Scene {
     this.push = null;
     this.branchLabel = null;
     this.panel = null;
+    this.floats = 0;
     this.lastJudge = { text: '[LAST: —]', color: 0x71717a };
     this.mode = 'approach';
     this.approach = { start: this.vNow(), speed: Phaser.Math.FloatBetween(0.09, 0.2) };
@@ -393,13 +396,17 @@ export class PrototypeScene extends Phaser.Scene {
 
   /** 머리 위로 떠오르며 사라지는 텍스트 */
   private floatText(text: string, x: number, y: number, color: number, size = 11): void {
+    // 캐릭터 라벨 위에서 시작, 이전 텍스트가 남아 있으면 한 칸씩 위로
+    const labelTop = this.labels ? Math.min(this.toriLabel.y - this.toriLabel.height, this.ukeLabel.y - this.ukeLabel.height) - 2 : y;
+    y = Math.min(y, labelTop) - this.floats * 14;
+    this.floats++;
     const t = this.add.text(x, y, text, {
       fontFamily: FONT_FAMILY, fontSize: `${size}px`, fontStyle: 'bold', color: hex(color), stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5, 1).setScale(1.3);
     this.worldLayer.add(t);
     this.tweens.add({ targets: t, scale: 1, duration: 120, ease: 'Back.easeOut' });
     this.tweens.add({ targets: t, y: y - 26, duration: 1000, ease: 'Cubic.easeOut' });
-    this.tweens.add({ targets: t, alpha: 0, delay: 600, duration: 400, onComplete: () => t.destroy() });
+    this.tweens.add({ targets: t, alpha: 0, delay: 600, duration: 400, onComplete: () => { t.destroy(); this.floats--; } });
   }
 
   // ───────────────────────────── render ─────────────────────────────
@@ -623,6 +630,8 @@ export class PrototypeScene extends Phaser.Scene {
     const g = this.uiG;
     g.clear();
     this.panelText.setVisible(!!this.panel);
+    this.phaseText.setVisible(!this.panel);
+    this.hintText.setVisible(!this.panel);
     if (this.panel) {
       g.fillStyle(0x09090b, 0.9).fillRect(GAME_WIDTH / 2 - 215, 142, 430, 108);
       g.lineStyle(1, 0x3f3f46, 1).strokeRect(GAME_WIDTH / 2 - 214.5, 142.5, 429, 107);

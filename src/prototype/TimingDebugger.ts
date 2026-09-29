@@ -58,6 +58,7 @@ export class TimingDebugger {
   private marks: Mark[] = [];
   private log: { text: string; color: number }[] = [];
   private readonly barY: number;
+  private lastPopup = { x: -999, at: 0, lift: 0 };
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -134,7 +135,12 @@ export class TimingDebugger {
 
   /** 입력 순간 마커 위로 떠오르는 오차 팝업 */
   private popup(ms: number, text: string, color: number): void {
-    const t = this.scene.add.text(this.px(ms), this.barY - 10, text, {
+    // 최근 팝업과 가까우면 한 단 위로 (연속 비트 겹침 방지)
+    const x = this.px(ms);
+    const now = this.scene.time.now;
+    const lift = Math.abs(x - this.lastPopup.x) < 110 && now - this.lastPopup.at < 900 ? (this.lastPopup.lift + 1) % 3 : 0;
+    this.lastPopup = { x, at: now, lift };
+    const t = this.scene.add.text(x, this.barY - 10 - lift * 12, text, {
       ...font(10, hex(color)), fontStyle: 'bold', stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5, 1);
     this.layer.add(t);
