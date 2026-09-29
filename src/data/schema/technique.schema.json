@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://aikido-game.local/schema/technique.schema.json",
   "title": "Aikido Technique",
-  "description": "기술(공격 × 기술 × 변형) 1개를 Phase 시퀀스로 정의한다. 좌표계: 기술 공간(technique space) — 원점은 기술 시작 시 nage의 발 기준점, +x는 시작 시 nage→uke 방향, +y는 아래(Phaser 기준). 플레이어가 화면 오른쪽에 있으면 엔진이 x에 -1을 곱해 미러링한다.",
+  "description": "기술(공격 × 기술 × 변형) 1개를 Stage(인지 → 진입 → 던지기) 단위 Phase 시퀀스로 정의한다. 좌표계: 기술 공간(technique space) — 원점은 기술 시작 시 nage의 발 기준점, +x는 시작 시 nage→uke 방향, +y는 아래(Phaser 기준). 플레이어가 화면 오른쪽에 있으면 엔진이 x에 -1을 곱해 미러링한다.",
   "type": "object",
   "required": ["id", "version", "name", "attack", "technique", "variant", "principles", "requires", "animations", "phases", "branches"],
   "properties": {
@@ -57,6 +57,7 @@
       "additionalProperties": false
     },
     "phases": {
+      "description": "성공 루트. stage 는 recognition → entry → throw 순서로 비감소해야 한다.",
       "type": "array",
       "minItems": 1,
       "items": { "$ref": "#/$defs/phase" }
@@ -65,8 +66,9 @@
       "description": "실패/분기 시퀀스. goto 'branch:<id>' 로 참조",
       "type": "object",
       "propertyNames": { "pattern": "^[a-z0-9_]+$" },
-      "additionalProperties": { "$ref": "#/$defs/branch" }
-    }
+      "additionalProperties": { "$ref": "#/$defs/script" }
+    },
+    "ukemi": { "$ref": "#/$defs/ukemi" }
   },
   "additionalProperties": false,
 
@@ -78,7 +80,12 @@
       "additionalProperties": false
     },
     "principle": { "enum": ["maai", "musubi", "irimi", "tenkan", "kuzushi", "zanshin"] },
+    "stage": {
+      "description": "recognition(인지) → entry(기울이기/진입) → throw(던지기·우케미)",
+      "enum": ["recognition", "entry", "throw"]
+    },
     "grade": { "enum": ["perfect", "early", "late", "miss"] },
+    "ukemiGrade": { "enum": ["perfect", "sloppy", "crash"] },
 
     "range": {
       "description": "[fromMs, toMs) — targetMs 기준 상대 오프셋(ms)",
@@ -87,6 +94,16 @@
       "items": false,
       "minItems": 2
     },
+    "timingWindow": {
+      "type": "object",
+      "required": ["perfect", "early", "late"],
+      "properties": {
+        "perfect": { "$ref": "#/$defs/range" },
+        "early": { "$ref": "#/$defs/range" },
+        "late": { "$ref": "#/$defs/range" }
+      },
+      "additionalProperties": false
+    },
 
     "actorSlot": {
       "type": "object",
@@ -94,6 +111,15 @@
       "properties": {
         "anim": { "$ref": "animation.schema.json#/$defs/animKey" },
         "startAtMs": { "type": "integer", "minimum": 0, "default": 0 }
+      },
+      "additionalProperties": false
+    },
+    "actors": {
+      "type": "object",
+      "required": ["nage", "uke"],
+      "properties": {
+        "nage": { "$ref": "#/$defs/actorSlot" },
+        "uke": { "$ref": "#/$defs/actorSlot" }
       },
       "additionalProperties": false
     },
@@ -111,9 +137,8 @@
       },
       "additionalProperties": false
     },
-
     "tracks": {
-      "description": "nage: 기술 공간의 루트 위치. uke: nage 기준점으로부터의 상대 오프셋(캐릭터 간 X/Y 보정).",
+      "description": "nage: 기술 공간의 루트 위치(phase) 또는 진입 지점 기준 델타(branch/ukemi). uke: nage 기준점으로부터의 상대 오프셋(캐릭터 간 X/Y 보정).",
       "type": "object",
       "required": ["nage", "uke"],
       "properties": {
@@ -125,7 +150,31 @@
 
     "goto": {
       "type": "string",
-      "pattern": "^(phase|branch):[a-z0-9_]+$|^end:(success|fail)$"
+      "pattern": "^(phase|branch):[a-z0-9_]+$|^ukemi$|^end:(success|fail)$",
+      "description": "'ukemi' = 누적 성공 기록으로 낙법 결과(perfect/sloppy/crash)를 도출해 해당 시퀀스 재생"
+    },
+
+    "reaction": {
+      "description": "연출 신호. whiff=헛스윙, hit=피격, clash=충돌, pushback=밀려남(px)",
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["whiff", "hit", "clash", "pushback"] },
+        "px": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+
+    "effect": {
+      "type": "object",
+      "properties": {
+        "score": { "type": "integer" },
+        "musubi": { "type": "integer", "description": "무스비 게이지 증감" },
+        "hitstopMs": { "type": "integer", "minimum": 0, "maximum": 300 },
+        "fx": { "$ref": "animation.schema.json#/$defs/animKey" },
+        "reaction": { "$ref": "#/$defs/reaction" }
+      },
+      "additionalProperties": false
     },
 
     "outcome": {
@@ -133,23 +182,32 @@
       "required": ["goto"],
       "properties": {
         "goto": { "$ref": "#/$defs/goto" },
+        "interrupt": {
+          "type": "boolean",
+          "description": "true: 판정 즉시 전환 / false: 페이즈 종료(durationMs) 후 전환. 기본값: branch/end:fail 이면 true, 그 외 false"
+        },
         "score": { "type": "integer" },
-        "musubi": { "type": "integer", "description": "무스비 게이지 증감" },
+        "musubi": { "type": "integer" },
         "hitstopMs": { "type": "integer", "minimum": 0, "maximum": 300 },
-        "fx": { "$ref": "animation.schema.json#/$defs/animKey" }
+        "fx": { "$ref": "animation.schema.json#/$defs/animKey" },
+        "reaction": { "$ref": "#/$defs/reaction" }
       },
       "additionalProperties": false
     },
 
-    "input": {
+    "beat": {
+      "description": "단일 타이밍 체크 1회",
       "type": "object",
-      "required": ["type"],
+      "required": ["type", "button", "targetMs", "window"],
       "properties": {
-        "type": { "enum": ["none", "press", "direction_press", "hold_release"] },
+        "type": { "enum": ["press", "direction_press", "hold_release"] },
         "button": { "enum": ["ACTION", "GUARD"] },
-        "direction": { "enum": ["FORWARD", "BACK", "UP", "DOWN"], "description": "nage 현재 facing 기준 상대 방향" },
+        "direction": {
+          "enum": ["FORWARD", "BACK", "UP", "DOWN"],
+          "description": "페이즈 시작 시점 nage facing 기준 상대 방향. 틀린 방향 입력은 miss"
+        },
         "targetMs": { "type": "integer", "minimum": 0, "description": "페이즈 시작 기준 이상적 입력 시점" },
-        "holdStartMaxMs": { "type": "integer", "minimum": 0, "description": "hold_release: 이 시점까지 누르기 시작해야 함" },
+        "holdStartMaxMs": { "type": "integer", "minimum": 0, "description": "hold_release: 이 시점 이전(미만)에 누르기 시작해야 함" },
         "sync": {
           "description": "targetMs가 맞물려야 하는 애니메이션 프레임 이벤트(검증용)",
           "type": "object",
@@ -160,59 +218,77 @@
           },
           "additionalProperties": false
         },
-        "window": {
-          "type": "object",
-          "required": ["perfect", "early", "late"],
-          "properties": {
-            "perfect": { "$ref": "#/$defs/range" },
-            "early": { "$ref": "#/$defs/range" },
-            "late": { "$ref": "#/$defs/range" }
-          },
-          "additionalProperties": false
-        }
+        "window": { "$ref": "#/$defs/timingWindow" }
       },
       "allOf": [
-        {
-          "if": { "properties": { "type": { "not": { "const": "none" } } } },
-          "then": { "required": ["button", "targetMs", "window"] }
-        },
-        {
-          "if": { "properties": { "type": { "const": "direction_press" } } },
-          "then": { "required": ["direction"] }
-        },
-        {
-          "if": { "properties": { "type": { "const": "hold_release" } } },
-          "then": { "required": ["holdStartMaxMs"] }
-        }
+        { "if": { "properties": { "type": { "const": "direction_press" } } }, "then": { "required": ["direction"] } },
+        { "if": { "properties": { "type": { "const": "hold_release" } } }, "then": { "required": ["holdStartMaxMs"] } }
       ],
       "additionalProperties": false
     },
 
+    "noInput": {
+      "type": "object",
+      "required": ["type"],
+      "properties": { "type": { "const": "none" } },
+      "additionalProperties": false
+    },
+
+    "sequenceInput": {
+      "description": "n회 연속 입력. beats 개수만큼 동적으로 처리된다.",
+      "type": "object",
+      "required": ["type", "beats"],
+      "properties": {
+        "type": { "const": "sequence" },
+        "beats": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/beat" } },
+        "breakOn": {
+          "description": "이 등급이 나오면 즉시 시퀀스 중단 → outcomes[등급]. 기본 [\"miss\"]",
+          "type": "array",
+          "items": { "enum": ["early", "late", "miss"] },
+          "uniqueItems": true,
+          "default": ["miss"]
+        },
+        "beatEffects": {
+          "description": "중단되지 않은 비트별 효과",
+          "type": "object",
+          "properties": {
+            "perfect": { "$ref": "#/$defs/effect" },
+            "early": { "$ref": "#/$defs/effect" },
+            "late": { "$ref": "#/$defs/effect" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "input": {
+      "oneOf": [
+        { "$ref": "#/$defs/noInput" },
+        { "$ref": "#/$defs/beat" },
+        { "$ref": "#/$defs/sequenceInput" }
+      ]
+    },
+
     "phase": {
       "type": "object",
-      "required": ["id", "label", "durationMs", "actors", "tracks", "input", "outcomes"],
+      "required": ["id", "stage", "label", "durationMs", "actors", "tracks", "input", "outcomes"],
       "properties": {
         "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "stage": { "$ref": "#/$defs/stage" },
         "label": { "$ref": "#/$defs/i18n" },
         "principle": { "$ref": "#/$defs/principle" },
         "durationMs": { "type": "integer", "minimum": 1 },
-        "actors": {
-          "type": "object",
-          "required": ["nage", "uke"],
-          "properties": {
-            "nage": { "$ref": "#/$defs/actorSlot" },
-            "uke": { "$ref": "#/$defs/actorSlot" }
-          },
-          "additionalProperties": false
-        },
+        "actors": { "$ref": "#/$defs/actors" },
         "tracks": { "$ref": "#/$defs/tracks" },
         "input": { "$ref": "#/$defs/input" },
         "outcomes": {
-          "description": "input.type='none'이면 'auto'만, 그 외엔 perfect/early/late/miss 모두 필요",
+          "description": "none → auto / 단일 비트 → perfect·early·late·miss / sequence → perfect(전부 perfect)·clear(완주)·breakOn 등급",
           "type": "object",
           "properties": {
             "auto": { "$ref": "#/$defs/outcome" },
             "perfect": { "$ref": "#/$defs/outcome" },
+            "clear": { "$ref": "#/$defs/outcome" },
             "early": { "$ref": "#/$defs/outcome" },
             "late": { "$ref": "#/$defs/outcome" },
             "miss": { "$ref": "#/$defs/outcome" }
@@ -223,24 +299,17 @@
       "additionalProperties": false
     },
 
-    "branch": {
+    "script": {
+      "description": "입력 없는 연출 시퀀스(분기/낙법). 진입 시 result 효과 적용, 종료 시 result.goto 로 전환",
       "type": "object",
       "required": ["label", "durationMs", "actors", "tracks", "result"],
       "properties": {
         "label": { "$ref": "#/$defs/i18n" },
         "durationMs": { "type": "integer", "minimum": 1 },
-        "actors": {
-          "type": "object",
-          "required": ["nage", "uke"],
-          "properties": {
-            "nage": { "$ref": "#/$defs/actorSlot" },
-            "uke": { "$ref": "#/$defs/actorSlot" }
-          },
-          "additionalProperties": false
-        },
+        "actors": { "$ref": "#/$defs/actors" },
         "tracks": {
           "$ref": "#/$defs/tracks",
-          "description": "분기 트랙의 nage x/y는 분기 진입 시점 nage 위치 기준 델타(진입 지점이 가변이므로). uke는 동일하게 nage 기준 상대 오프셋."
+          "description": "nage x/y는 진입 시점 nage 위치 기준 델타(진입 지점이 가변이므로). uke는 동일하게 nage 기준 상대 오프셋."
         },
         "result": {
           "type": "object",
@@ -248,7 +317,49 @@
           "properties": {
             "goto": { "$ref": "#/$defs/goto" },
             "damage": { "type": "integer", "minimum": 0 },
-            "musubi": { "type": "integer" }
+            "musubi": { "type": "integer" },
+            "score": { "type": "integer" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "ukemiRule": {
+      "description": "모든 조건 AND. 위에서부터 첫 일치 규칙 채택. 마지막 규칙은 조건 없는 기본값이어야 함",
+      "type": "object",
+      "required": ["result"],
+      "properties": {
+        "result": { "$ref": "#/$defs/ukemiGrade" },
+        "minSuccess": { "type": "integer", "minimum": 0, "description": "누적 Perfect 횟수 이상" },
+        "minSuccessRatio": { "type": "number", "minimum": 0, "maximum": 1, "description": "Perfect / 전체 체크 비율 이상 (n 가변 기술용)" },
+        "minStreak": { "type": "integer", "minimum": 0, "description": "최대 연속 Perfect 이상" },
+        "minMusubi": { "type": "integer", "minimum": 0 },
+        "throwGrades": { "type": "array", "items": { "$ref": "#/$defs/grade" }, "uniqueItems": true, "minItems": 1 }
+      },
+      "additionalProperties": false
+    },
+
+    "ukemi": {
+      "type": "object",
+      "required": ["rules", "results"],
+      "properties": {
+        "countStages": {
+          "description": "성공 횟수 집계 대상 stage. 기본: 전체",
+          "type": "array",
+          "items": { "$ref": "#/$defs/stage" },
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "rules": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/ukemiRule" } },
+        "results": {
+          "type": "object",
+          "required": ["perfect", "sloppy", "crash"],
+          "properties": {
+            "perfect": { "$ref": "#/$defs/script" },
+            "sloppy": { "$ref": "#/$defs/script" },
+            "crash": { "$ref": "#/$defs/script" }
           },
           "additionalProperties": false
         }
