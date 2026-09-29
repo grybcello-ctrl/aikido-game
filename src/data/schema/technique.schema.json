@@ -1,0 +1,259 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aikido-engine.local/schema/technique.schema.json",
+  "title": "Aikido Technique",
+  "description": "기술(공격 × 기술 × 변형) 1개를 Phase 시퀀스로 정의한다. 좌표계: 기술 공간(technique space) — 원점은 기술 시작 시 nage의 발 기준점, +x는 시작 시 nage→uke 방향, +y는 아래(Phaser 기준). 플레이어가 화면 오른쪽에 있으면 엔진이 x에 -1을 곱해 미러링한다.",
+  "type": "object",
+  "required": ["id", "version", "name", "attack", "technique", "variant", "principles", "requires", "animations", "phases", "branches"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "version": { "type": "integer", "minimum": 1 },
+    "name": { "$ref": "#/$defs/i18n" },
+    "attack": { "enum": ["shomenuchi", "yokomenuchi", "tsuki", "katatedori", "ryotedori"] },
+    "technique": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "variant": { "enum": ["omote", "ura"] },
+    "principles": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/principle" },
+      "uniqueItems": true,
+      "minItems": 1
+    },
+    "requires": {
+      "type": "object",
+      "required": ["maai"],
+      "properties": {
+        "maai": {
+          "description": "기술 진입 조건: nage↔uke 수평 거리(px)",
+          "type": "object",
+          "required": ["minPx", "idealPx", "maxPx"],
+          "properties": {
+            "minPx": { "type": "integer", "minimum": 0 },
+            "idealPx": { "type": "integer", "minimum": 0 },
+            "maxPx": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "animations": {
+      "type": "object",
+      "required": ["common", "exclusive"],
+      "properties": {
+        "common": {
+          "description": "공통 레지스트리(common.json)에서 로드해야 하는 키 목록",
+          "type": "array",
+          "items": { "$ref": "animation.schema.json#/$defs/commonKey" },
+          "uniqueItems": true
+        },
+        "exclusive": {
+          "description": "이 기술 전용 애니메이션 정의. 키는 tech.<id>.<actor>.<name>",
+          "type": "object",
+          "propertyNames": { "$ref": "animation.schema.json#/$defs/exclusiveKey" },
+          "additionalProperties": { "$ref": "animation.schema.json#/$defs/animationDef" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "phases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/phase" }
+    },
+    "branches": {
+      "description": "실패/분기 시퀀스. goto 'branch:<id>' 로 참조",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z0-9_]+$" },
+      "additionalProperties": { "$ref": "#/$defs/branch" }
+    }
+  },
+  "additionalProperties": false,
+
+  "$defs": {
+    "i18n": {
+      "type": "object",
+      "required": ["ko"],
+      "properties": { "ko": { "type": "string" }, "ja": { "type": "string" }, "en": { "type": "string" } },
+      "additionalProperties": false
+    },
+    "principle": { "enum": ["maai", "musubi", "irimi", "tenkan", "kuzushi", "zanshin"] },
+    "grade": { "enum": ["perfect", "early", "late", "miss"] },
+
+    "range": {
+      "description": "[fromMs, toMs) — targetMs 기준 상대 오프셋(ms)",
+      "type": "array",
+      "prefixItems": [{ "type": "integer" }, { "type": "integer" }],
+      "items": false,
+      "minItems": 2
+    },
+
+    "actorSlot": {
+      "type": "object",
+      "required": ["anim"],
+      "properties": {
+        "anim": { "$ref": "animation.schema.json#/$defs/animKey" },
+        "startAtMs": { "type": "integer", "minimum": 0, "default": 0 }
+      },
+      "additionalProperties": false
+    },
+
+    "trackKey": {
+      "type": "object",
+      "required": ["atMs"],
+      "properties": {
+        "atMs": { "type": "integer", "minimum": 0 },
+        "x": { "type": "integer" },
+        "y": { "type": "integer" },
+        "facing": { "enum": [1, -1], "description": "기술 공간 기준 바라보는 방향" },
+        "depth": { "type": "integer", "description": "렌더 순서(클수록 앞)" },
+        "ease": { "type": "string", "default": "Linear", "description": "Phaser ease 이름. 'Stepped' 권장(스내피)" }
+      },
+      "additionalProperties": false
+    },
+
+    "tracks": {
+      "description": "nage: 기술 공간의 루트 위치. uke: nage 기준점으로부터의 상대 오프셋(캐릭터 간 X/Y 보정).",
+      "type": "object",
+      "required": ["nage", "uke"],
+      "properties": {
+        "nage": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/trackKey" } },
+        "uke": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/trackKey" } }
+      },
+      "additionalProperties": false
+    },
+
+    "goto": {
+      "type": "string",
+      "pattern": "^(phase|branch):[a-z0-9_]+$|^end:(success|fail)$"
+    },
+
+    "outcome": {
+      "type": "object",
+      "required": ["goto"],
+      "properties": {
+        "goto": { "$ref": "#/$defs/goto" },
+        "score": { "type": "integer" },
+        "musubi": { "type": "integer", "description": "무스비 게이지 증감" },
+        "hitstopMs": { "type": "integer", "minimum": 0, "maximum": 300 },
+        "fx": { "$ref": "animation.schema.json#/$defs/animKey" }
+      },
+      "additionalProperties": false
+    },
+
+    "input": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["none", "press", "direction_press", "hold_release"] },
+        "button": { "enum": ["ACTION", "GUARD"] },
+        "direction": { "enum": ["FORWARD", "BACK", "UP", "DOWN"], "description": "nage 현재 facing 기준 상대 방향" },
+        "targetMs": { "type": "integer", "minimum": 0, "description": "페이즈 시작 기준 이상적 입력 시점" },
+        "holdStartMaxMs": { "type": "integer", "minimum": 0, "description": "hold_release: 이 시점까지 누르기 시작해야 함" },
+        "sync": {
+          "description": "targetMs가 맞물려야 하는 애니메이션 프레임 이벤트(검증용)",
+          "type": "object",
+          "required": ["actor", "event"],
+          "properties": {
+            "actor": { "enum": ["nage", "uke"] },
+            "event": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "window": {
+          "type": "object",
+          "required": ["perfect", "early", "late"],
+          "properties": {
+            "perfect": { "$ref": "#/$defs/range" },
+            "early": { "$ref": "#/$defs/range" },
+            "late": { "$ref": "#/$defs/range" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "not": { "const": "none" } } } },
+          "then": { "required": ["button", "targetMs", "window"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "direction_press" } } },
+          "then": { "required": ["direction"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "hold_release" } } },
+          "then": { "required": ["holdStartMaxMs"] }
+        }
+      ],
+      "additionalProperties": false
+    },
+
+    "phase": {
+      "type": "object",
+      "required": ["id", "label", "durationMs", "actors", "tracks", "input", "outcomes"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "label": { "$ref": "#/$defs/i18n" },
+        "principle": { "$ref": "#/$defs/principle" },
+        "durationMs": { "type": "integer", "minimum": 1 },
+        "actors": {
+          "type": "object",
+          "required": ["nage", "uke"],
+          "properties": {
+            "nage": { "$ref": "#/$defs/actorSlot" },
+            "uke": { "$ref": "#/$defs/actorSlot" }
+          },
+          "additionalProperties": false
+        },
+        "tracks": { "$ref": "#/$defs/tracks" },
+        "input": { "$ref": "#/$defs/input" },
+        "outcomes": {
+          "description": "input.type='none'이면 'auto'만, 그 외엔 perfect/early/late/miss 모두 필요",
+          "type": "object",
+          "properties": {
+            "auto": { "$ref": "#/$defs/outcome" },
+            "perfect": { "$ref": "#/$defs/outcome" },
+            "early": { "$ref": "#/$defs/outcome" },
+            "late": { "$ref": "#/$defs/outcome" },
+            "miss": { "$ref": "#/$defs/outcome" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "branch": {
+      "type": "object",
+      "required": ["label", "durationMs", "actors", "tracks", "result"],
+      "properties": {
+        "label": { "$ref": "#/$defs/i18n" },
+        "durationMs": { "type": "integer", "minimum": 1 },
+        "actors": {
+          "type": "object",
+          "required": ["nage", "uke"],
+          "properties": {
+            "nage": { "$ref": "#/$defs/actorSlot" },
+            "uke": { "$ref": "#/$defs/actorSlot" }
+          },
+          "additionalProperties": false
+        },
+        "tracks": {
+          "$ref": "#/$defs/tracks",
+          "description": "분기 트랙의 nage x/y는 분기 진입 시점 nage 위치 기준 델타(진입 지점이 가변이므로). uke는 동일하게 nage 기준 상대 오프셋."
+        },
+        "result": {
+          "type": "object",
+          "required": ["goto"],
+          "properties": {
+            "goto": { "$ref": "#/$defs/goto" },
+            "damage": { "type": "integer", "minimum": 0 },
+            "musubi": { "type": "integer" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

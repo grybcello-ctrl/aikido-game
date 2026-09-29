@@ -1,0 +1,295 @@
+{
+  "$schema": "../schema/technique.schema.json",
+  "id": "shomenuchi_iriminage_ura",
+  "version": 1,
+  "name": { "ko": "정면타 입신던지기 (우라)", "ja": "正面打ち入身投げ（裏）", "en": "Shomenuchi Iriminage (Ura)" },
+  "attack": "shomenuchi",
+  "technique": "iriminage",
+  "variant": "ura",
+  "principles": ["maai", "musubi", "irimi", "tenkan"],
+
+  "requires": {
+    "maai": { "minPx": 56, "idealPx": 72, "maxPx": 88 }
+  },
+
+  "animations": {
+    "common": [
+      "common.nage.kamae",
+      "common.nage.zanshin",
+      "common.nage.hit_head",
+      "common.uke.shomenuchi_windup",
+      "common.uke.shomenuchi_strike",
+      "common.uke.recover",
+      "common.uke.ukemi_back",
+      "common.fx.hit_spark"
+    ],
+    "exclusive": {
+      "tech.shomenuchi_iriminage_ura.nage.irimi_awase": {
+        "actor": "nage", "atlas": "nage", "prefix": "iri_ura_awase_", "start": 0, "end": 3, "frameRate": 10,
+        "origin": { "x": 0.5, "y": 1 },
+        "frameOffsets": [{ "frame": 2, "x": 2, "y": -1 }],
+        "events": [{ "frame": 2, "name": "contact" }]
+      },
+      "tech.shomenuchi_iriminage_ura.nage.tenkan": {
+        "actor": "nage", "atlas": "nage", "prefix": "iri_ura_tenkan_", "start": 0, "end": 5, "frameRate": 10,
+        "origin": { "x": 0.5, "y": 1 },
+        "frameOffsets": [{ "frame": 3, "x": -2, "y": 0 }, { "frame": 4, "x": -4, "y": 0 }],
+        "events": [{ "frame": 3, "name": "pivot" }]
+      },
+      "tech.shomenuchi_iriminage_ura.nage.lead_shoulder": {
+        "actor": "nage", "atlas": "nage", "prefix": "iri_ura_lead_", "start": 0, "end": 5, "frameRate": 10,
+        "origin": { "x": 0.5, "y": 1 },
+        "holds": { "2": 2, "5": 2 }
+      },
+      "tech.shomenuchi_iriminage_ura.nage.throw_cut": {
+        "actor": "nage", "atlas": "nage", "prefix": "iri_ura_cut_", "start": 0, "end": 4, "frameRate": 10,
+        "origin": { "x": 0.5, "y": 1 },
+        "events": [{ "frame": 2, "name": "cut" }]
+      },
+      "tech.shomenuchi_iriminage_ura.uke.drawn_around": {
+        "actor": "uke", "atlas": "uke", "prefix": "iri_ura_drawn_", "start": 0, "end": 5, "frameRate": 10,
+        "origin": { "x": 0.5, "y": 1 }
+      },
+      "tech.shomenuchi_iriminage_ura.uke.spiral_kuzushi": {
+        "actor": "uke", "atlas": "uke", "prefix": "iri_ura_spiral_", "start": 0, "end": 7, "frameRate": 10,
+        "origin": { "x": 0.5, "y": 1 },
+        "frameOffsets": [{ "frame": 3, "x": 2, "y": 4 }, { "frame": 4, "x": 2, "y": 6 }],
+        "events": [{ "frame": 6, "name": "rise" }]
+      },
+      "tech.shomenuchi_iriminage_ura.uke.thrown": {
+        "actor": "uke", "atlas": "uke", "prefix": "iri_ura_thrown_", "start": 0, "end": 4, "frameRate": 10,
+        "origin": { "x": 0.5, "y": 1 },
+        "events": [{ "frame": 2, "name": "fall" }]
+      },
+      "tech.shomenuchi_iriminage_ura.fx.musubi_ring": {
+        "actor": "fx", "atlas": "fx", "prefix": "musubi_ring_", "start": 0, "end": 5, "frameRate": 12,
+        "origin": { "x": 0.5, "y": 0.5 }
+      }
+    }
+  },
+
+  "phases": [
+    {
+      "id": "maai",
+      "label": { "ko": "마아이", "ja": "間合い" },
+      "principle": "maai",
+      "durationMs": 500,
+      "actors": {
+        "nage": { "anim": "common.nage.kamae" },
+        "uke":  { "anim": "common.uke.shomenuchi_windup" }
+      },
+      "tracks": {
+        "nage": [{ "atMs": 0, "x": 0, "y": 0, "facing": 1, "depth": 10 }],
+        "uke": [
+          { "atMs": 0,   "x": 80, "y": 0, "facing": -1, "depth": 10 },
+          { "atMs": 500, "x": 72, "y": 0, "ease": "Stepped" }
+        ]
+      },
+      "input": { "type": "none" },
+      "outcomes": { "auto": { "goto": "phase:awase" } }
+    },
+    {
+      "id": "awase",
+      "label": { "ko": "아와세 · 이리미", "ja": "合わせ・入身" },
+      "principle": "irimi",
+      "durationMs": 400,
+      "actors": {
+        "nage": { "anim": "tech.shomenuchi_iriminage_ura.nage.irimi_awase" },
+        "uke":  { "anim": "common.uke.shomenuchi_strike" }
+      },
+      "tracks": {
+        "nage": [
+          { "atMs": 0,   "x": 0,  "y": 0,  "depth": 10 },
+          { "atMs": 200, "x": 16, "y": -4, "depth": 9, "ease": "Stepped" },
+          { "atMs": 400, "x": 20, "y": -4 }
+        ],
+        "uke": [
+          { "atMs": 0,   "x": 72, "y": 0 },
+          { "atMs": 200, "x": 40, "y": 0, "ease": "Stepped" },
+          { "atMs": 400, "x": 32, "y": 0 }
+        ]
+      },
+      "input": {
+        "type": "press",
+        "button": "ACTION",
+        "targetMs": 200,
+        "sync": { "actor": "uke", "event": "impact" },
+        "window": { "early": [-200, -50], "perfect": [-50, 50], "late": [50, 150] }
+      },
+      "outcomes": {
+        "perfect": { "goto": "phase:tenkan", "score": 100, "musubi": 20, "hitstopMs": 83, "fx": "tech.shomenuchi_iriminage_ura.fx.musubi_ring" },
+        "early":   { "goto": "branch:fail_early", "musubi": -10 },
+        "late":    { "goto": "branch:fail_late" },
+        "miss":    { "goto": "branch:fail_late" }
+      }
+    },
+    {
+      "id": "tenkan",
+      "label": { "ko": "텐칸 (뒤로 돌아 들어가기)", "ja": "転換" },
+      "principle": "tenkan",
+      "durationMs": 600,
+      "actors": {
+        "nage": { "anim": "tech.shomenuchi_iriminage_ura.nage.tenkan" },
+        "uke":  { "anim": "tech.shomenuchi_iriminage_ura.uke.drawn_around" }
+      },
+      "tracks": {
+        "nage": [
+          { "atMs": 0,   "x": 20, "y": -4, "facing": 1, "depth": 9 },
+          { "atMs": 300, "x": 36, "y": -4, "facing": -1, "ease": "Stepped" },
+          { "atMs": 600, "x": 40, "y": -2 }
+        ],
+        "uke": [
+          { "atMs": 0,   "x": 32,  "y": 0, "facing": -1, "depth": 10 },
+          { "atMs": 300, "x": 8,   "y": 0, "ease": "Stepped" },
+          { "atMs": 600, "x": -20, "y": 2 }
+        ]
+      },
+      "input": {
+        "type": "direction_press",
+        "button": "ACTION",
+        "direction": "BACK",
+        "targetMs": 300,
+        "sync": { "actor": "nage", "event": "pivot" },
+        "window": { "early": [-180, -60], "perfect": [-60, 60], "late": [60, 180] }
+      },
+      "outcomes": {
+        "perfect": { "goto": "phase:musubi", "score": 100, "musubi": 20 },
+        "early":   { "goto": "phase:musubi", "score": 40,  "musubi": -5 },
+        "late":    { "goto": "phase:musubi", "score": 40,  "musubi": -10 },
+        "miss":    { "goto": "branch:uke_escape" }
+      }
+    },
+    {
+      "id": "musubi",
+      "label": { "ko": "무스비 · 쿠즈시 (어깨로 이끌기)", "ja": "結び・崩し" },
+      "principle": "musubi",
+      "durationMs": 800,
+      "actors": {
+        "nage": { "anim": "tech.shomenuchi_iriminage_ura.nage.lead_shoulder" },
+        "uke":  { "anim": "tech.shomenuchi_iriminage_ura.uke.spiral_kuzushi" }
+      },
+      "tracks": {
+        "nage": [
+          { "atMs": 0,   "x": 40, "y": -2, "facing": -1, "depth": 9 },
+          { "atMs": 800, "x": 36, "y": 0 }
+        ],
+        "uke": [
+          { "atMs": 0,   "x": -20, "y": 2, "facing": -1, "depth": 10 },
+          { "atMs": 400, "x": -12, "y": 6, "ease": "Sine.easeInOut" },
+          { "atMs": 600, "x": -14, "y": 2, "facing": 1, "ease": "Stepped" },
+          { "atMs": 800, "x": -16, "y": 0 }
+        ]
+      },
+      "input": {
+        "type": "hold_release",
+        "button": "ACTION",
+        "holdStartMaxMs": 200,
+        "targetMs": 600,
+        "sync": { "actor": "uke", "event": "rise" },
+        "window": { "early": [-250, -70], "perfect": [-70, 70], "late": [70, 200] }
+      },
+      "outcomes": {
+        "perfect": { "goto": "phase:nage", "score": 150, "musubi": 30 },
+        "early":   { "goto": "branch:uke_escape", "musubi": -20 },
+        "late":    { "goto": "phase:nage", "score": 30, "musubi": -15 },
+        "miss":    { "goto": "branch:uke_escape" }
+      }
+    },
+    {
+      "id": "nage",
+      "label": { "ko": "던지기 (베어 내리기)", "ja": "投げ" },
+      "principle": "irimi",
+      "durationMs": 500,
+      "actors": {
+        "nage": { "anim": "tech.shomenuchi_iriminage_ura.nage.throw_cut" },
+        "uke":  { "anim": "tech.shomenuchi_iriminage_ura.uke.thrown" }
+      },
+      "tracks": {
+        "nage": [
+          { "atMs": 0,   "x": 36, "y": 0, "facing": -1, "depth": 10 },
+          { "atMs": 200, "x": 28, "y": 0, "ease": "Stepped" },
+          { "atMs": 500, "x": 24, "y": 0 }
+        ],
+        "uke": [
+          { "atMs": 0,   "x": -16, "y": 0, "facing": 1, "depth": 9 },
+          { "atMs": 200, "x": -24, "y": 0, "ease": "Stepped" },
+          { "atMs": 500, "x": -36, "y": 0 }
+        ]
+      },
+      "input": {
+        "type": "press",
+        "button": "ACTION",
+        "targetMs": 200,
+        "sync": { "actor": "nage", "event": "cut" },
+        "window": { "early": [-150, -50], "perfect": [-50, 50], "late": [50, 150] }
+      },
+      "outcomes": {
+        "perfect": { "goto": "phase:zanshin", "score": 200, "musubi": 30, "hitstopMs": 100, "fx": "common.fx.hit_spark" },
+        "early":   { "goto": "phase:zanshin", "score": 60 },
+        "late":    { "goto": "branch:uke_escape", "musubi": -10 },
+        "miss":    { "goto": "branch:uke_escape" }
+      }
+    },
+    {
+      "id": "zanshin",
+      "label": { "ko": "잔심", "ja": "残心" },
+      "principle": "zanshin",
+      "durationMs": 750,
+      "actors": {
+        "nage": { "anim": "common.nage.zanshin" },
+        "uke":  { "anim": "common.uke.ukemi_back" }
+      },
+      "tracks": {
+        "nage": [{ "atMs": 0, "x": 24, "y": 0, "facing": -1, "depth": 10 }],
+        "uke": [
+          { "atMs": 0,   "x": -36, "y": 0, "facing": 1, "depth": 9 },
+          { "atMs": 500, "x": -52, "y": 0 }
+        ]
+      },
+      "input": { "type": "none" },
+      "outcomes": { "auto": { "goto": "end:success" } }
+    }
+  ],
+
+  "branches": {
+    "fail_early": {
+      "label": { "ko": "성급한 이리미 — 우케가 재조준", "ja": "早すぎ" },
+      "durationMs": 400,
+      "actors": {
+        "nage": { "anim": "common.nage.hit_head" },
+        "uke":  { "anim": "common.uke.shomenuchi_strike" }
+      },
+      "tracks": {
+        "nage": [{ "atMs": 0, "x": 0, "y": 0 }, { "atMs": 400, "x": -8, "y": 0 }],
+        "uke":  [{ "atMs": 0, "x": 40, "y": 0 }]
+      },
+      "result": { "goto": "end:fail", "damage": 8 }
+    },
+    "fail_late": {
+      "label": { "ko": "늦은 대응 — 정면타 피격", "ja": "遅すぎ" },
+      "durationMs": 400,
+      "actors": {
+        "nage": { "anim": "common.nage.hit_head" },
+        "uke":  { "anim": "common.uke.shomenuchi_strike" }
+      },
+      "tracks": {
+        "nage": [{ "atMs": 0, "x": 0, "y": 0 }, { "atMs": 400, "x": -12, "y": 0 }],
+        "uke":  [{ "atMs": 0, "x": 36, "y": 0 }]
+      },
+      "result": { "goto": "end:fail", "damage": 15 }
+    },
+    "uke_escape": {
+      "label": { "ko": "무스비 단절 — 우케 이탈", "ja": "結びが切れる" },
+      "durationMs": 500,
+      "actors": {
+        "nage": { "anim": "common.nage.kamae" },
+        "uke":  { "anim": "common.uke.recover" }
+      },
+      "tracks": {
+        "nage": [{ "atMs": 0, "x": 0, "y": 0 }],
+        "uke":  [{ "atMs": 0, "x": -20, "y": 0 }, { "atMs": 500, "x": -64, "y": 0, "facing": 1 }]
+      },
+      "result": { "goto": "end:fail", "musubi": -20 }
+    }
+  }
+}

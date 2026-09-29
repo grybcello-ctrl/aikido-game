@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aikido-engine.local/schema/animation.schema.json",
+  "title": "Animation Registry",
+  "description": "스프라이트 애니메이션 정의. 공통(common.*) 레지스트리와 기술 전용(tech.<techId>.*) 정의가 동일한 animationDef를 사용한다.",
+  "type": "object",
+  "required": ["animations"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "animations": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/commonKey" },
+      "additionalProperties": { "$ref": "#/$defs/animationDef" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "actor": { "enum": ["nage", "uke", "fx"] },
+    "commonKey": {
+      "type": "string",
+      "pattern": "^common\\.(nage|uke|fx)\\.[a-z0-9_]+$"
+    },
+    "exclusiveKey": {
+      "type": "string",
+      "pattern": "^tech\\.[a-z0-9_]+\\.(nage|uke|fx)\\.[a-z0-9_]+$"
+    },
+    "animKey": {
+      "anyOf": [{ "$ref": "#/$defs/commonKey" }, { "$ref": "#/$defs/exclusiveKey" }]
+    },
+    "animationDef": {
+      "type": "object",
+      "required": ["actor", "atlas", "prefix", "start", "end", "frameRate"],
+      "properties": {
+        "actor": { "$ref": "#/$defs/actor" },
+        "atlas": { "type": "string", "description": "로드된 텍스처 아틀라스 키" },
+        "prefix": { "type": "string", "description": "아틀라스 프레임명 접두사 (예: 'tenkan_' → tenkan_00)" },
+        "start": { "type": "integer", "minimum": 0 },
+        "end": { "type": "integer", "minimum": 0 },
+        "zeroPad": { "type": "integer", "minimum": 0, "default": 2 },
+        "frameRate": {
+          "type": "integer",
+          "minimum": 8,
+          "maximum": 12,
+          "description": "리미티드 애니메이션: 8~12fps 고정"
+        },
+        "repeat": { "type": "integer", "minimum": -1, "default": 0 },
+        "holds": {
+          "type": "object",
+          "description": "키포즈 유지. { \"<프레임 인덱스>\": 틱 수(>=2) } — 해당 프레임이 N프레임 분량 유지됨",
+          "propertyNames": { "pattern": "^[0-9]+$" },
+          "additionalProperties": { "type": "integer", "minimum": 2, "maximum": 8 }
+        },
+        "origin": {
+          "type": "object",
+          "description": "스프라이트 기준점(발 중심). 기본 {x:0.5, y:1}",
+          "required": ["x", "y"],
+          "properties": {
+            "x": { "type": "number", "minimum": 0, "maximum": 1 },
+            "y": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "additionalProperties": false
+        },
+        "frameOffsets": {
+          "type": "array",
+          "description": "프레임별 기준점 보정(px, 캐릭터 로컬: +x = 캐릭터가 바라보는 방향)",
+          "items": {
+            "type": "object",
+            "required": ["frame", "x", "y"],
+            "properties": {
+              "frame": { "type": "integer", "minimum": 0 },
+              "x": { "type": "integer" },
+              "y": { "type": "integer" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "events": {
+          "type": "array",
+          "description": "프레임 이벤트. 페이즈 입력의 sync 기준점으로 사용",
+          "items": {
+            "type": "object",
+            "required": ["frame", "name"],
+            "properties": {
+              "frame": { "type": "integer", "minimum": 0 },
+              "name": { "type": "string", "pattern": "^[a-z0-9_]+$" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
