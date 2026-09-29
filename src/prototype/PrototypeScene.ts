@@ -528,7 +528,7 @@ export class PrototypeScene extends Phaser.Scene {
       b.type === 'direction_press' ? `${this.arrow(b.direction!, facing)} + ${key(b)}`
       : b.type === 'hold_release' ? `${key(b)} 누르고 … 떼기`
       : key(b);
-    const cue = beats[0].sync ? `  @ ${beats[0].sync.actor}:${beats[0].sync.event}` : '';
+    const cue = beats[0].sync ? `   (${beats[0].sync.actor}:${beats[0].sync.event})` : '';
     return p.input.type === 'sequence' ? `${one(beats[0])} ×${beats.length}  (리듬에 맞춰)` : `${one(beats[0])}${cue}`;
   }
 

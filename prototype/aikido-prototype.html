@@ -484,8 +484,8 @@
 
   // src/prototype/fonts.ts
   var FONT_FAMILY = '"Nanum Gothic Coding", D2Coding, "Malgun Gothic", "Apple SD Gothic Neo", monospace';
-  var HANGUL = /[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7A3]/g;
-  var hangulIn = (...texts) => [...new Set(texts.join("").match(HANGUL) ?? [])].join("");
+  var NON_ASCII = /[^\x00-\x7F]/g;
+  var glyphsIn = (...texts) => [...new Set(texts.join("").match(NON_ASCII) ?? [])].join("");
   var loadFonts = async (glyphs2, timeoutMs = 4e3) => {
     if (!document.fonts || !glyphs2) return;
     const sample = `${glyphs2}ABC012`;
@@ -1891,7 +1891,7 @@ ${sub}` : text).setColor(hex(color)).setAlpha(1).setScale(1.5);
       if (!beats.length) return p.id === "maai" ? "공격을 읽어라 — 정면타 예비동작" : "";
       const key = (b) => b.button === "ACTION" ? "Z" : "X";
       const one = (b) => b.type === "direction_press" ? `${this.arrow(b.direction, facing)} + ${key(b)}` : b.type === "hold_release" ? `${key(b)} 누르고 … 떼기` : key(b);
-      const cue = beats[0].sync ? `  @ ${beats[0].sync.actor}:${beats[0].sync.event}` : "";
+      const cue = beats[0].sync ? `   (${beats[0].sync.actor}:${beats[0].sync.event})` : "";
       return p.input.type === "sequence" ? `${one(beats[0])} ×${beats.length}  (리듬에 맞춰)` : `${one(beats[0])}${cue}`;
     }
     arrow(dir, facing) {
@@ -1903,7 +1903,7 @@ ${sub}` : text).setColor(hex(color)).setAlpha(1).setScale(1.5);
   };
 
   // src/prototype/main.ts
-  var glyphs = hangulIn(
+  var glyphs = glyphsIn(
     ...Array.from(document.scripts, (s) => s.text),
     JSON.stringify(shomenuchi_iriminage_ura_default)
   );
