@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import type { EngineEvent, EngineState } from '../engine/TimingEngine';
 import { beatsOf, windowBounds } from '../engine/judge';
 import type { Beat, Grade, Phase, Range, Stage, TechniqueData } from '../types/technique';
+import { FONT_FAMILY } from './fonts';
 
 export const GRADE_COLOR: Record<Grade, number> = {
   perfect: 0x22c55e,
@@ -16,7 +17,7 @@ const STAGE_LABEL: Record<Stage, string> = { recognition: '1 인지', entry: '2 
 const IGNORED = 0x71717a;
 const MAX_MARKS = 12;
 const MAX_LOG = 5;
-const FONT = { fontFamily: 'monospace', fontSize: '9px', color: '#e4e4e7' };
+const FONT = { fontFamily: FONT_FAMILY, fontSize: '9px', color: '#e4e4e7' };
 
 interface Mark { ms: number; color: number; label: string; ignored: boolean }
 

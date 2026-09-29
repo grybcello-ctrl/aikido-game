@@ -10,6 +10,8 @@
   #game { width: 100vw; height: 100vh; }
   canvas { image-rendering: pixelated; }
 </style>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding:wght@400;700&display=swap" />
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 </head>
 <body>
@@ -59,6 +61,17 @@
     },
     scene: scenes
   });
+
+  // src/prototype/fonts.ts
+  var FONT_FAMILY = '"Nanum Gothic Coding", D2Coding, "Malgun Gothic", "Apple SD Gothic Neo", monospace';
+  var loadFonts = async (timeoutMs = 2500) => {
+    if (!document.fonts) return;
+    const load = Promise.all([
+      document.fonts.load('10px "Nanum Gothic Coding"', "가나다"),
+      document.fonts.load('bold 10px "Nanum Gothic Coding"', "가나다")
+    ]).then(() => void 0);
+    await Promise.race([load, new Promise((r) => setTimeout(r, timeoutMs))]).catch(() => void 0);
+  };
 
   // src/data/animations/common.json
   var common_default = {
@@ -1266,7 +1279,7 @@
   var IGNORED = 7434618;
   var MAX_MARKS = 12;
   var MAX_LOG = 5;
-  var FONT = { fontFamily: "monospace", fontSize: "9px", color: "#e4e4e7" };
+  var FONT = { fontFamily: FONT_FAMILY, fontSize: "9px", color: "#e4e4e7" };
   var TimingDebugger = class {
     constructor(scene, data, layer, x = 16, y = 304, w = 608) {
       __publicField(this, "data", data);
@@ -1488,7 +1501,7 @@
       const uiCam = this.cameras.add(0, 0, GAME_WIDTH, GAME_HEIGHT);
       uiCam.ignore(this.worldLayer);
       this.cameras.main.ignore(this.uiLayer);
-      const font = (size, color = "#e4e4e7") => ({ fontFamily: "monospace", fontSize: `${size}px`, color });
+      const font = (size, color = "#e4e4e7") => ({ fontFamily: FONT_FAMILY, fontSize: `${size}px`, color });
       this.world = this.add.graphics();
       this.fxG = this.add.graphics();
       this.nageLabel = this.add.text(0, 0, "", font(8, "#93c5fd")).setOrigin(0.5, 1);
@@ -1574,7 +1587,7 @@
       this.mode = "ready";
       this.panel.setVisible(true);
       this.centerText.setVisible(true).setColor("#e4e4e7").setText([
-        "合気 TIMING PROTOTYPE",
+        "AIKIDO TIMING PROTOTYPE",
         `${TECH.name.ko}`,
         "",
         "Enter / Z : 시작",
@@ -1624,7 +1637,7 @@
             this.onFx(e);
             break;
           case "ukemi":
-            this.showPopup(`受け身 ${e.result.toUpperCase()}`, UKEMI_COLOR[e.result], `Perfect ${e.successes}/${e.checks}`);
+            this.showPopup(`낙법 ${e.result.toUpperCase()}`, UKEMI_COLOR[e.result], `Perfect ${e.successes}/${e.checks}`);
             break;
           case "end":
             this.onEnd(e);
@@ -1721,7 +1734,7 @@ ${sub}` : text).setColor(hex(color)).setAlpha(1).setScale(1.5);
     }
     floatText(text, x, y, color) {
       const t = this.add.text(x, y, text, {
-        fontFamily: "monospace",
+        fontFamily: FONT_FAMILY,
         fontSize: "10px",
         color: hex(color),
         stroke: "#000000",
@@ -1802,6 +1815,7 @@ ${sub}` : text).setColor(hex(color)).setAlpha(1).setScale(1.5);
       const label = (t, p, a) => t.setVisible(this.labels).setPosition(a.x, a.top - 2).setText(`${shortAnim(p.anim)}[${p.frame}]`);
       label(this.nageLabel, pose.nage, anchors.nage);
       label(this.ukeLabel, pose.uke, anchors.uke);
+      if (Math.abs(anchors.nage.x - anchors.uke.x) < 90) this.ukeLabel.setY(Math.min(anchors.uke.top, anchors.nage.top) - 12);
       this.drawFx(inTech ? local : 0);
       this.drawHud();
       this.dbg.draw(inTech ? this.state : null);
@@ -1826,7 +1840,7 @@ ${sub}` : text).setColor(hex(color)).setAlpha(1).setScale(1.5);
       const col = ok ? 2278750 : 7434618;
       g.fillStyle(col).fillRect(Math.min(nx, ux), y, Math.abs(ux - nx), 1);
       g.fillRect(nx, y - 3, 1, 7).fillRect(ux, y - 3, 1, 7);
-      this.maaiText.setPosition((nx + ux) / 2, y - 2).setColor(hex(col)).setText(`間合い ${Math.round(d)}px${ok ? " ✓" : ""}`);
+      this.maaiText.setPosition((nx + ux) / 2, y - 2).setColor(hex(col)).setText(`마아이 ${Math.round(d)}px${ok ? " OK" : ""}`);
     }
     drawFx(t) {
       const g = this.fxG;
@@ -1887,7 +1901,7 @@ ${sub}` : text).setColor(hex(color)).setAlpha(1).setScale(1.5);
   };
 
   // src/prototype/main.ts
-  new phaser_global_default.Game(createGameConfig([PrototypeScene], "game"));
+  void loadFonts().then(() => new phaser_global_default.Game(createGameConfig([PrototypeScene], "game")));
 })();
 
 </script>

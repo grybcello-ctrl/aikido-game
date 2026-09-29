@@ -11,6 +11,7 @@ import { PoseTracker, frameAt, type ActorPose, type EaseFn, type Pose } from '..
 import type {
   AnimationDef, AnimationRegistry, Beat, Direction, Grade, Phase, TechniqueData, UkemiGrade,
 } from '../types/technique';
+import { FONT_FAMILY } from './fonts';
 import { GRADE_COLOR, TimingDebugger, fmtMs, hex } from './TimingDebugger';
 
 type Ev<T extends EngineEvent['type']> = Extract<EngineEvent, { type: T }>;
@@ -123,7 +124,7 @@ export class PrototypeScene extends Phaser.Scene {
     uiCam.ignore(this.worldLayer);
     this.cameras.main.ignore(this.uiLayer);
 
-    const font = (size: number, color = '#e4e4e7') => ({ fontFamily: 'monospace', fontSize: `${size}px`, color });
+    const font = (size: number, color = '#e4e4e7') => ({ fontFamily: FONT_FAMILY, fontSize: `${size}px`, color });
 
     this.world = this.add.graphics();
     this.fxG = this.add.graphics();
@@ -210,7 +211,7 @@ export class PrototypeScene extends Phaser.Scene {
     this.mode = 'ready';
     this.panel.setVisible(true);
     this.centerText.setVisible(true).setColor('#e4e4e7').setText([
-      '合気 TIMING PROTOTYPE',
+      'AIKIDO TIMING PROTOTYPE',
       `${TECH.name.ko}`,
       '',
       'Enter / Z : 시작',
@@ -253,7 +254,7 @@ export class PrototypeScene extends Phaser.Scene {
         case 'hitstop': this.onHitstop(e.durationMs); break;
         case 'fx': this.onFx(e); break;
         case 'ukemi':
-          this.showPopup(`受け身 ${e.result.toUpperCase()}`, UKEMI_COLOR[e.result], `Perfect ${e.successes}/${e.checks}`);
+          this.showPopup(`낙법 ${e.result.toUpperCase()}`, UKEMI_COLOR[e.result], `Perfect ${e.successes}/${e.checks}`);
           break;
         case 'end': this.onEnd(e); break;
         default: break;
@@ -360,7 +361,7 @@ export class PrototypeScene extends Phaser.Scene {
 
   private floatText(text: string, x: number, y: number, color: number): void {
     const t = this.add.text(x, y, text, {
-      fontFamily: 'monospace', fontSize: '10px', color: hex(color), stroke: '#000000', strokeThickness: 3,
+      fontFamily: FONT_FAMILY, fontSize: '10px', color: hex(color), stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5, 1);
     this.worldLayer.add(t);
     this.tweens.add({ targets: t, y: y - 14, alpha: 0, duration: 650, onComplete: () => t.destroy() });
@@ -442,6 +443,7 @@ export class PrototypeScene extends Phaser.Scene {
       t.setVisible(this.labels).setPosition(a.x, a.top - 2).setText(`${shortAnim(p.anim)}[${p.frame}]`);
     label(this.nageLabel, pose.nage, anchors.nage);
     label(this.ukeLabel, pose.uke, anchors.uke);
+    if (Math.abs(anchors.nage.x - anchors.uke.x) < 90) this.ukeLabel.setY(Math.min(anchors.uke.top, anchors.nage.top) - 12);
 
     this.drawFx(inTech ? local : 0);
     this.drawHud();
@@ -468,7 +470,7 @@ export class PrototypeScene extends Phaser.Scene {
     const col = ok ? 0x22c55e : 0x71717a;
     g.fillStyle(col).fillRect(Math.min(nx, ux), y, Math.abs(ux - nx), 1);
     g.fillRect(nx, y - 3, 1, 7).fillRect(ux, y - 3, 1, 7);
-    this.maaiText.setPosition((nx + ux) / 2, y - 2).setColor(hex(col)).setText(`間合い ${Math.round(d)}px${ok ? ' ✓' : ''}`);
+    this.maaiText.setPosition((nx + ux) / 2, y - 2).setColor(hex(col)).setText(`마아이 ${Math.round(d)}px${ok ? ' OK' : ''}`);
   }
 
   private drawFx(t: number): void {

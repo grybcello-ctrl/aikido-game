@@ -35,6 +35,8 @@ const html = `<!doctype html>
   #game { width: 100vw; height: 100vh; }
   canvas { image-rendering: pixelated; }
 </style>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding:wght@400;700&display=swap" />
 <script src="https://cdn.jsdelivr.net/npm/phaser@${phaserVersion}/dist/phaser.min.js"></script>
 </head>
 <body>
