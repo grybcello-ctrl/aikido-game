@@ -406,7 +406,7 @@ export class PrototypeScene extends Phaser.Scene {
     this.worldLayer.add(t);
     this.tweens.add({ targets: t, scale: 1, duration: 120, ease: 'Back.easeOut' });
     this.tweens.add({ targets: t, y: y - 26, duration: 1000, ease: 'Cubic.easeOut' });
-    this.tweens.add({ targets: t, alpha: 0, delay: 600, duration: 400, onComplete: () => { t.destroy(); this.floats--; } });
+    this.tweens.add({ targets: t, alpha: 0, delay: 600, duration: 400, onComplete: () => { t.destroy(); this.floats = Math.max(0, this.floats - 1); } });
   }
 
   // ───────────────────────────── render ─────────────────────────────
