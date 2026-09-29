@@ -1,0 +1,1895 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aikido Timing Prototype — aikido-game 0.1.0</title>
+<!-- 자동 생성 파일: npm run build:prototype (직접 수정하지 말 것) -->
+<style>
+  html, body { margin: 0; height: 100%; background: #0a0a0a; overflow: hidden; }
+  #game { width: 100vw; height: 100vh; }
+  canvas { image-rendering: pixelated; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+</head>
+<body>
+<div id="game"></div>
+<script>
+"use strict";
+(() => {
+  var __defProp = Object.defineProperty;
+  var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+  var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+
+  // scripts/phaser-global.js
+  var phaser_global_default = window.Phaser;
+
+  // src/config/gameConfig.ts
+  var GAME_WIDTH = 640;
+  var GAME_HEIGHT = 360;
+  var FLOOR_Y = 300;
+  var createGameConfig = (scenes = [], parent = "game") => ({
+    type: phaser_global_default.AUTO,
+    parent,
+    width: GAME_WIDTH,
+    height: GAME_HEIGHT,
+    backgroundColor: "#1b1b1f",
+    // 픽셀아트: 최근접 필터링 + 정수 좌표 렌더링(서브픽셀 번짐 방지)
+    pixelArt: true,
+    roundPixels: true,
+    antialias: false,
+    scale: {
+      mode: phaser_global_default.Scale.FIT,
+      // 비율 유지 확대
+      autoCenter: phaser_global_default.Scale.CENTER_BOTH
+    },
+    // 로직/입력 판정은 60Hz로 정밀하게, 애니메이션만 8~12fps(ANIM_FPS)로 구동
+    fps: {
+      target: 60,
+      smoothStep: false
+      // 델타 보정 스무딩 끔 → 타이밍 판정(ms)의 예측 가능성 확보
+    },
+    input: {
+      keyboard: true,
+      gamepad: true
+    },
+    physics: {
+      default: "arcade",
+      arcade: { gravity: { x: 0, y: 0 }, debug: false }
+    },
+    scene: scenes
+  });
+
+  // src/data/animations/common.json
+  var common_default = {
+    $schema: "../schema/animation.schema.json",
+    animations: {
+      "common.nage.kamae": { actor: "nage", atlas: "nage", prefix: "kamae_", start: 0, end: 3, frameRate: 8, repeat: -1, origin: { x: 0.5, y: 1 } },
+      "common.nage.zanshin": { actor: "nage", atlas: "nage", prefix: "zanshin_", start: 0, end: 3, frameRate: 8, holds: { "3": 3 }, origin: { x: 0.5, y: 1 } },
+      "common.nage.hit_head": {
+        actor: "nage",
+        atlas: "nage",
+        prefix: "hit_head_",
+        start: 0,
+        end: 3,
+        frameRate: 12,
+        origin: { x: 0.5, y: 1 },
+        frameOffsets: [{ frame: 1, x: -3, y: 0 }, { frame: 2, x: -5, y: 1 }]
+      },
+      "common.nage.whiff_hit": {
+        actor: "nage",
+        atlas: "nage",
+        prefix: "whiff_hit_",
+        start: 0,
+        end: 5,
+        frameRate: 12,
+        origin: { x: 0.5, y: 1 },
+        frameOffsets: [{ frame: 1, x: 4, y: 0 }, { frame: 4, x: -4, y: 0 }, { frame: 5, x: -6, y: 1 }],
+        events: [{ frame: 3, name: "struck" }]
+      },
+      "common.nage.pushed_back": {
+        actor: "nage",
+        atlas: "nage",
+        prefix: "pushed_back_",
+        start: 0,
+        end: 3,
+        frameRate: 10,
+        origin: { x: 0.5, y: 1 },
+        holds: { "0": 2 },
+        frameOffsets: [{ frame: 1, x: -4, y: 0 }, { frame: 2, x: -6, y: 0 }]
+      },
+      "common.uke.kamae": { actor: "uke", atlas: "uke", prefix: "kamae_", start: 0, end: 3, frameRate: 8, repeat: -1, origin: { x: 0.5, y: 1 } },
+      "common.uke.shomenuchi_windup": {
+        actor: "uke",
+        atlas: "uke",
+        prefix: "shomen_windup_",
+        start: 0,
+        end: 3,
+        frameRate: 8,
+        origin: { x: 0.5, y: 1 },
+        events: [{ frame: 3, name: "raise_peak" }]
+      },
+      "common.uke.shomenuchi_strike": {
+        actor: "uke",
+        atlas: "uke",
+        prefix: "shomen_strike_",
+        start: 0,
+        end: 3,
+        frameRate: 10,
+        origin: { x: 0.5, y: 1 },
+        frameOffsets: [{ frame: 2, x: 4, y: 0 }, { frame: 3, x: 6, y: 1 }],
+        events: [{ frame: 2, name: "impact" }]
+      },
+      "common.uke.recover": { actor: "uke", atlas: "uke", prefix: "recover_", start: 0, end: 3, frameRate: 10, origin: { x: 0.5, y: 1 } },
+      "common.uke.ukemi_back": {
+        actor: "uke",
+        atlas: "uke",
+        prefix: "ukemi_back_",
+        start: 0,
+        end: 5,
+        frameRate: 12,
+        origin: { x: 0.5, y: 1 },
+        frameOffsets: [{ frame: 3, x: -4, y: 2 }, { frame: 4, x: -8, y: 4 }, { frame: 5, x: -10, y: 4 }]
+      },
+      "common.uke.ukemi_sloppy": {
+        actor: "uke",
+        atlas: "uke",
+        prefix: "ukemi_sloppy_",
+        start: 0,
+        end: 5,
+        frameRate: 10,
+        origin: { x: 0.5, y: 1 },
+        frameOffsets: [{ frame: 2, x: -3, y: 3 }, { frame: 3, x: -6, y: 5 }, { frame: 4, x: -7, y: 4 }]
+      },
+      "common.uke.crash": {
+        actor: "uke",
+        atlas: "uke",
+        prefix: "crash_",
+        start: 0,
+        end: 4,
+        frameRate: 10,
+        holds: { "4": 3 },
+        origin: { x: 0.5, y: 1 },
+        frameOffsets: [{ frame: 2, x: -2, y: 6 }, { frame: 3, x: -3, y: 8 }, { frame: 4, x: -3, y: 8 }],
+        events: [{ frame: 2, name: "impact" }]
+      },
+      "common.uke.down": { actor: "uke", atlas: "uke", prefix: "down_", start: 0, end: 1, frameRate: 8, repeat: -1, origin: { x: 0.5, y: 1 } },
+      "common.fx.hit_spark": { actor: "fx", atlas: "fx", prefix: "hit_spark_", start: 0, end: 2, frameRate: 12, origin: { x: 0.5, y: 0.5 } }
+    }
+  };
+
+  // src/data/techniques/shomenuchi_iriminage_ura.json
+  var shomenuchi_iriminage_ura_default = {
+    $schema: "../schema/technique.schema.json",
+    id: "shomenuchi_iriminage_ura",
+    version: 2,
+    name: { ko: "정면타 입신던지기 (우라)", ja: "正面打ち入身投げ（裏）", en: "Shomenuchi Iriminage (Ura)" },
+    attack: "shomenuchi",
+    technique: "iriminage",
+    variant: "ura",
+    principles: ["maai", "musubi", "irimi", "tenkan", "kuzushi", "zanshin"],
+    requires: {
+      maai: { minPx: 56, idealPx: 72, maxPx: 88 }
+    },
+    animations: {
+      common: [
+        "common.nage.kamae",
+        "common.nage.zanshin",
+        "common.nage.hit_head",
+        "common.nage.whiff_hit",
+        "common.nage.pushed_back",
+        "common.uke.shomenuchi_windup",
+        "common.uke.shomenuchi_strike",
+        "common.uke.recover",
+        "common.uke.ukemi_back",
+        "common.uke.ukemi_sloppy",
+        "common.uke.crash",
+        "common.fx.hit_spark"
+      ],
+      exclusive: {
+        "tech.shomenuchi_iriminage_ura.nage.irimi_awase": {
+          actor: "nage",
+          atlas: "nage",
+          prefix: "iri_ura_awase_",
+          start: 0,
+          end: 3,
+          frameRate: 10,
+          origin: { x: 0.5, y: 1 },
+          frameOffsets: [{ frame: 2, x: 2, y: -1 }],
+          events: [{ frame: 2, name: "contact" }]
+        },
+        "tech.shomenuchi_iriminage_ura.nage.tenkan": {
+          actor: "nage",
+          atlas: "nage",
+          prefix: "iri_ura_tenkan_",
+          start: 0,
+          end: 5,
+          frameRate: 10,
+          origin: { x: 0.5, y: 1 },
+          frameOffsets: [{ frame: 3, x: -2, y: 0 }, { frame: 4, x: -4, y: 0 }],
+          events: [{ frame: 3, name: "pivot" }]
+        },
+        "tech.shomenuchi_iriminage_ura.nage.lead_shoulder": {
+          actor: "nage",
+          atlas: "nage",
+          prefix: "iri_ura_lead_",
+          start: 0,
+          end: 7,
+          frameRate: 10,
+          origin: { x: 0.5, y: 1 }
+        },
+        "tech.shomenuchi_iriminage_ura.nage.throw_cut": {
+          actor: "nage",
+          atlas: "nage",
+          prefix: "iri_ura_cut_",
+          start: 0,
+          end: 4,
+          frameRate: 10,
+          origin: { x: 0.5, y: 1 },
+          events: [{ frame: 2, name: "cut" }]
+        },
+        "tech.shomenuchi_iriminage_ura.uke.drawn_around": {
+          actor: "uke",
+          atlas: "uke",
+          prefix: "iri_ura_drawn_",
+          start: 0,
+          end: 5,
+          frameRate: 10,
+          origin: { x: 0.5, y: 1 }
+        },
+        "tech.shomenuchi_iriminage_ura.uke.spiral_kuzushi": {
+          actor: "uke",
+          atlas: "uke",
+          prefix: "iri_ura_spiral_",
+          start: 0,
+          end: 7,
+          frameRate: 10,
+          origin: { x: 0.5, y: 1 },
+          frameOffsets: [{ frame: 3, x: 2, y: 4 }, { frame: 4, x: 2, y: 6 }],
+          events: [
+            { frame: 2, name: "lead_1" },
+            { frame: 4, name: "lead_2" },
+            { frame: 6, name: "rise" }
+          ]
+        },
+        "tech.shomenuchi_iriminage_ura.uke.thrown": {
+          actor: "uke",
+          atlas: "uke",
+          prefix: "iri_ura_thrown_",
+          start: 0,
+          end: 4,
+          frameRate: 10,
+          origin: { x: 0.5, y: 1 },
+          events: [{ frame: 2, name: "fall" }]
+        },
+        "tech.shomenuchi_iriminage_ura.fx.musubi_ring": {
+          actor: "fx",
+          atlas: "fx",
+          prefix: "musubi_ring_",
+          start: 0,
+          end: 5,
+          frameRate: 12,
+          origin: { x: 0.5, y: 0.5 }
+        }
+      }
+    },
+    phases: [
+      {
+        id: "maai",
+        stage: "recognition",
+        label: { ko: "마아이 (공격 인지)", ja: "間合い" },
+        principle: "maai",
+        durationMs: 500,
+        actors: {
+          nage: { anim: "common.nage.kamae" },
+          uke: { anim: "common.uke.shomenuchi_windup" }
+        },
+        tracks: {
+          nage: [{ atMs: 0, x: 0, y: 0, facing: 1, depth: 10 }],
+          uke: [
+            { atMs: 0, x: 80, y: 0, facing: -1, depth: 10 },
+            { atMs: 500, x: 72, y: 0, ease: "Stepped" }
+          ]
+        },
+        input: { type: "none" },
+        outcomes: { auto: { goto: "phase:awase" } }
+      },
+      {
+        id: "awase",
+        stage: "recognition",
+        label: { ko: "아와세 · 이리미", ja: "合わせ・入身" },
+        principle: "irimi",
+        durationMs: 400,
+        actors: {
+          nage: { anim: "tech.shomenuchi_iriminage_ura.nage.irimi_awase" },
+          uke: { anim: "common.uke.shomenuchi_strike" }
+        },
+        tracks: {
+          nage: [
+            { atMs: 0, x: 0, y: 0, depth: 10 },
+            { atMs: 200, x: 16, y: -4, depth: 9, ease: "Stepped" },
+            { atMs: 400, x: 20, y: -4 }
+          ],
+          uke: [
+            { atMs: 0, x: 72, y: 0 },
+            { atMs: 200, x: 40, y: 0, ease: "Stepped" },
+            { atMs: 400, x: 32, y: 0 }
+          ]
+        },
+        input: {
+          type: "press",
+          button: "ACTION",
+          targetMs: 200,
+          sync: { actor: "uke", event: "impact" },
+          window: { early: [-200, -50], perfect: [-50, 50], late: [50, 150] }
+        },
+        outcomes: {
+          perfect: { goto: "phase:tenkan", score: 100, musubi: 20, hitstopMs: 120, fx: "tech.shomenuchi_iriminage_ura.fx.musubi_ring" },
+          early: { goto: "branch:whiff_hit", musubi: -10, reaction: { type: "whiff" } },
+          late: { goto: "branch:clash_pushback", musubi: -10, reaction: { type: "clash", px: 12 } },
+          miss: { goto: "branch:struck", reaction: { type: "hit" } }
+        }
+      },
+      {
+        id: "tenkan",
+        stage: "entry",
+        label: { ko: "텐칸 (뒤로 돌아 들어가기)", ja: "転換" },
+        principle: "tenkan",
+        durationMs: 600,
+        actors: {
+          nage: { anim: "tech.shomenuchi_iriminage_ura.nage.tenkan" },
+          uke: { anim: "tech.shomenuchi_iriminage_ura.uke.drawn_around" }
+        },
+        tracks: {
+          nage: [
+            { atMs: 0, x: 20, y: -4, facing: 1, depth: 9 },
+            { atMs: 300, x: 36, y: -4, facing: -1, ease: "Stepped" },
+            { atMs: 600, x: 40, y: -2 }
+          ],
+          uke: [
+            { atMs: 0, x: 32, y: 0, facing: -1, depth: 10 },
+            { atMs: 300, x: 8, y: 0, ease: "Stepped" },
+            { atMs: 600, x: -20, y: 2 }
+          ]
+        },
+        input: {
+          type: "direction_press",
+          button: "ACTION",
+          direction: "BACK",
+          targetMs: 300,
+          sync: { actor: "nage", event: "pivot" },
+          window: { early: [-180, -60], perfect: [-60, 60], late: [60, 180] }
+        },
+        outcomes: {
+          perfect: { goto: "phase:musubi", score: 100, musubi: 15, hitstopMs: 100 },
+          early: { goto: "phase:musubi", score: 30, musubi: -10, reaction: { type: "whiff" } },
+          late: { goto: "phase:musubi", score: 30, musubi: -10, reaction: { type: "pushback", px: 6 } },
+          miss: { goto: "branch:uke_escape" }
+        }
+      },
+      {
+        id: "musubi",
+        stage: "entry",
+        label: { ko: "무스비 · 쿠즈시 (나선으로 이끌기 ×3)", ja: "結び・崩し" },
+        principle: "kuzushi",
+        durationMs: 800,
+        actors: {
+          nage: { anim: "tech.shomenuchi_iriminage_ura.nage.lead_shoulder" },
+          uke: { anim: "tech.shomenuchi_iriminage_ura.uke.spiral_kuzushi" }
+        },
+        tracks: {
+          nage: [
+            { atMs: 0, x: 40, y: -2, facing: -1, depth: 9 },
+            { atMs: 800, x: 36, y: 0 }
+          ],
+          uke: [
+            { atMs: 0, x: -20, y: 2, facing: -1, depth: 10 },
+            { atMs: 400, x: -12, y: 6, ease: "Sine.easeInOut" },
+            { atMs: 600, x: -14, y: 2, facing: 1, ease: "Stepped" },
+            { atMs: 800, x: -16, y: 0 }
+          ]
+        },
+        input: {
+          type: "sequence",
+          breakOn: ["miss"],
+          beats: [
+            {
+              type: "press",
+              button: "ACTION",
+              targetMs: 200,
+              sync: { actor: "uke", event: "lead_1" },
+              window: { early: [-100, -40], perfect: [-40, 40], late: [40, 100] }
+            },
+            {
+              type: "press",
+              button: "ACTION",
+              targetMs: 400,
+              sync: { actor: "uke", event: "lead_2" },
+              window: { early: [-100, -40], perfect: [-40, 40], late: [40, 100] }
+            },
+            {
+              type: "press",
+              button: "ACTION",
+              targetMs: 600,
+              sync: { actor: "uke", event: "rise" },
+              window: { early: [-100, -40], perfect: [-40, 40], late: [40, 100] }
+            }
+          ],
+          beatEffects: {
+            perfect: { score: 50, musubi: 5, hitstopMs: 100 },
+            early: { musubi: -5, reaction: { type: "whiff" } },
+            late: { musubi: -5, reaction: { type: "pushback", px: 4 } }
+          }
+        },
+        outcomes: {
+          perfect: { goto: "phase:nage", score: 100, musubi: 10, fx: "tech.shomenuchi_iriminage_ura.fx.musubi_ring" },
+          clear: { goto: "phase:nage" },
+          miss: { goto: "branch:uke_escape", musubi: -10 }
+        }
+      },
+      {
+        id: "nage",
+        stage: "throw",
+        label: { ko: "던지기 (베어 내리기)", ja: "投げ" },
+        principle: "irimi",
+        durationMs: 500,
+        actors: {
+          nage: { anim: "tech.shomenuchi_iriminage_ura.nage.throw_cut" },
+          uke: { anim: "tech.shomenuchi_iriminage_ura.uke.thrown" }
+        },
+        tracks: {
+          nage: [
+            { atMs: 0, x: 36, y: 0, facing: -1, depth: 10 },
+            { atMs: 200, x: 28, y: 0, ease: "Stepped" },
+            { atMs: 500, x: 24, y: 0 }
+          ],
+          uke: [
+            { atMs: 0, x: -16, y: 0, facing: 1, depth: 9 },
+            { atMs: 200, x: -24, y: 0, ease: "Stepped" },
+            { atMs: 500, x: -36, y: 0 }
+          ]
+        },
+        input: {
+          type: "press",
+          button: "ACTION",
+          targetMs: 200,
+          sync: { actor: "nage", event: "cut" },
+          window: { early: [-150, -50], perfect: [-50, 50], late: [50, 150] }
+        },
+        outcomes: {
+          perfect: { goto: "ukemi", score: 200, musubi: 20, hitstopMs: 150, fx: "common.fx.hit_spark" },
+          early: { goto: "ukemi", score: 50, reaction: { type: "whiff" } },
+          late: { goto: "ukemi", score: 50, reaction: { type: "clash", px: 4 } },
+          miss: { goto: "branch:uke_escape" }
+        }
+      }
+    ],
+    ukemi: {
+      rules: [
+        { result: "perfect", minSuccess: 5, throwGrades: ["perfect"] },
+        { result: "sloppy", minSuccess: 3 },
+        { result: "crash" }
+      ],
+      results: {
+        perfect: {
+          label: { ko: "깨끗한 후방낙법 · 잔심", ja: "受け身・残心" },
+          durationMs: 750,
+          actors: {
+            nage: { anim: "common.nage.zanshin" },
+            uke: { anim: "common.uke.ukemi_back" }
+          },
+          tracks: {
+            nage: [{ atMs: 0, x: 0, y: 0, facing: -1, depth: 10 }],
+            uke: [
+              { atMs: 0, x: -36, y: 0, facing: 1, depth: 9 },
+              { atMs: 500, x: -52, y: 0 }
+            ]
+          },
+          result: { goto: "end:success", score: 300, musubi: 10 }
+        },
+        sloppy: {
+          label: { ko: "흐트러진 낙법", ja: "乱れた受け身" },
+          durationMs: 750,
+          actors: {
+            nage: { anim: "common.nage.zanshin" },
+            uke: { anim: "common.uke.ukemi_sloppy" }
+          },
+          tracks: {
+            nage: [{ atMs: 0, x: 0, y: 0, facing: -1, depth: 10 }],
+            uke: [
+              { atMs: 0, x: -36, y: 0, facing: 1, depth: 9 },
+              { atMs: 400, x: -46, y: 2, ease: "Stepped" },
+              { atMs: 600, x: -48, y: 0 }
+            ]
+          },
+          result: { goto: "end:success", score: 100 }
+        },
+        crash: {
+          label: { ko: "낙법 실패 — 처박힘", ja: "受け身失敗" },
+          durationMs: 750,
+          actors: {
+            nage: { anim: "common.nage.zanshin" },
+            uke: { anim: "common.uke.crash" }
+          },
+          tracks: {
+            nage: [{ atMs: 0, x: 0, y: 0, facing: -1, depth: 10 }],
+            uke: [
+              { atMs: 0, x: -36, y: 0, facing: 1, depth: 9 },
+              { atMs: 200, x: -40, y: 0, ease: "Stepped" }
+            ]
+          },
+          result: { goto: "end:success", score: 20, musubi: -20 }
+        }
+      }
+    },
+    branches: {
+      whiff_hit: {
+        label: { ko: "Early — 성급한 이리미: 헛스윙 후 피격", ja: "早すぎ" },
+        durationMs: 500,
+        actors: {
+          nage: { anim: "common.nage.whiff_hit" },
+          uke: { anim: "common.uke.shomenuchi_strike" }
+        },
+        tracks: {
+          nage: [{ atMs: 0, x: 0, y: 0 }, { atMs: 500, x: -8, y: 0 }],
+          uke: [{ atMs: 0, x: 40, y: 0 }]
+        },
+        result: { goto: "end:fail", damage: 10 }
+      },
+      clash_pushback: {
+        label: { ko: "Late — 정면 충돌: 밀려남", ja: "遅すぎ・衝突" },
+        durationMs: 500,
+        actors: {
+          nage: { anim: "common.nage.pushed_back" },
+          uke: { anim: "common.uke.shomenuchi_strike" }
+        },
+        tracks: {
+          nage: [{ atMs: 0, x: 0, y: 0 }, { atMs: 200, x: -16, y: 0, ease: "Stepped" }, { atMs: 400, x: -20, y: 0 }],
+          uke: [{ atMs: 0, x: 32, y: 0 }, { atMs: 400, x: 44, y: 0 }]
+        },
+        result: { goto: "end:fail", damage: 6 }
+      },
+      struck: {
+        label: { ko: "Miss — 무반응 정면타 피격", ja: "被弾" },
+        durationMs: 400,
+        actors: {
+          nage: { anim: "common.nage.hit_head" },
+          uke: { anim: "common.uke.shomenuchi_strike" }
+        },
+        tracks: {
+          nage: [{ atMs: 0, x: 0, y: 0 }, { atMs: 400, x: -12, y: 0 }],
+          uke: [{ atMs: 0, x: 36, y: 0 }]
+        },
+        result: { goto: "end:fail", damage: 15 }
+      },
+      uke_escape: {
+        label: { ko: "무스비 단절 — 우케 이탈", ja: "結びが切れる" },
+        durationMs: 500,
+        actors: {
+          nage: { anim: "common.nage.kamae" },
+          uke: { anim: "common.uke.recover" }
+        },
+        tracks: {
+          nage: [{ atMs: 0, x: 0, y: 0 }],
+          uke: [{ atMs: 0, x: -20, y: 0 }, { atMs: 500, x: -64, y: 0, facing: 1 }]
+        },
+        result: { goto: "end:fail", musubi: -20 }
+      }
+    }
+  };
+
+  // src/config/animation.ts
+  var ANIM_FPS = {
+    MIN: 8,
+    MAX: 12,
+    /** 기본값: 100ms/frame → 타이밍 윈도우를 100ms 그리드로 설계하기 쉬움 */
+    DEFAULT: 10,
+    /** 무거운 예비동작(후리카부리 등) */
+    HEAVY: 8,
+    /** 빠른 전환(텐칸, 우케미 등) */
+    QUICK: 12
+  };
+
+  // src/engine/judge.ts
+  var inRange = (d, [from, to]) => d >= from && d < to;
+  var gradeOffset = (w, offsetMs) => {
+    if (inRange(offsetMs, w.perfect)) return "perfect";
+    if (inRange(offsetMs, w.early)) return "early";
+    if (inRange(offsetMs, w.late)) return "late";
+    return null;
+  };
+  var windowBounds = (b) => ({
+    open: b.targetMs + b.window.early[0],
+    close: b.targetMs + b.window.late[1]
+  });
+  var beatsOf = (input2) => input2.type === "none" ? [] : input2.type === "sequence" ? input2.beats : [input2];
+
+  // src/engine/phaserBridge.ts
+  var bindKeyboard = (scene, target, toEngineTime = (t) => t) => {
+    const kb = scene.input.keyboard;
+    if (!kb) throw new Error("keyboard input plugin is disabled");
+    const K = phaser_global_default.Input.Keyboard.KeyCodes;
+    const keys = kb.addKeys(
+      { left: K.LEFT, right: K.RIGHT, up: K.UP, down: K.DOWN, action: K.Z, guard: K.X },
+      false
+    );
+    const engine = () => typeof target === "function" ? target() : target;
+    const stick = () => keys.left.isDown ? "LEFT" : keys.right.isDown ? "RIGHT" : keys.up.isDown ? "UP" : keys.down.isDown ? "DOWN" : void 0;
+    const bind = (key, button) => {
+      const down = (_k, e) => engine()?.press(button, toEngineTime(e.timeStamp), stick());
+      const up = (_k, e) => engine()?.release(button, toEngineTime(e.timeStamp));
+      key.on("down", down);
+      key.on("up", up);
+      return () => {
+        key.off("down", down);
+        key.off("up", up);
+      };
+    };
+    const unbind = [bind(keys.action, "ACTION"), bind(keys.guard, "GUARD")];
+    const now = () => toEngineTime(scene.game.loop.now);
+    return {
+      now,
+      stick,
+      tick: () => engine()?.update(now()) ?? [],
+      destroy: () => unbind.forEach((f) => f())
+    };
+  };
+
+  // src/engine/stats.ts
+  var createStats = (musubi) => ({
+    checks: 0,
+    successes: 0,
+    streak: 0,
+    maxStreak: 0,
+    grades: { perfect: 0, early: 0, late: 0, miss: 0 },
+    byStage: {
+      recognition: { checks: 0, successes: 0 },
+      entry: { checks: 0, successes: 0 },
+      throw: { checks: 0, successes: 0 }
+    },
+    throwGrade: null,
+    score: 0,
+    musubi,
+    damage: 0
+  });
+  var recordGrade = (s, stage, grade) => {
+    const ok = grade === "perfect";
+    s.checks++;
+    s.grades[grade]++;
+    s.byStage[stage].checks++;
+    if (ok) {
+      s.successes++;
+      s.byStage[stage].successes++;
+      s.streak++;
+      s.maxStreak = Math.max(s.maxStreak, s.streak);
+    } else {
+      s.streak = 0;
+    }
+    if (stage === "throw") s.throwGrade = grade;
+  };
+  var cloneStats = (s) => ({
+    ...s,
+    grades: { ...s.grades },
+    byStage: {
+      recognition: { ...s.byStage.recognition },
+      entry: { ...s.byStage.entry },
+      throw: { ...s.byStage.throw }
+    }
+  });
+
+  // src/engine/ukemi.ts
+  var ALL_STAGES = ["recognition", "entry", "throw"];
+  var summarizeForUkemi = (s, countStages = ALL_STAGES) => {
+    let successes = 0;
+    let checks = 0;
+    for (const st of countStages) {
+      successes += s.byStage[st].successes;
+      checks += s.byStage[st].checks;
+    }
+    return { successes, checks, maxStreak: s.maxStreak, musubi: s.musubi, throwGrade: s.throwGrade };
+  };
+  var matches = (r, u) => {
+    if (r.minSuccess !== void 0 && u.successes < r.minSuccess) return false;
+    if (r.minSuccessRatio !== void 0 && (u.checks ? u.successes / u.checks : 0) < r.minSuccessRatio) return false;
+    if (r.minStreak !== void 0 && u.maxStreak < r.minStreak) return false;
+    if (r.minMusubi !== void 0 && u.musubi < r.minMusubi) return false;
+    if (r.throwGrades && (u.throwGrade === null || !r.throwGrades.includes(u.throwGrade))) return false;
+    return true;
+  };
+  var deriveUkemi = (u, rules) => rules.find((r) => matches(r, u))?.result ?? "crash";
+
+  // src/engine/TimingEngine.ts
+  var durationOf = (r) => r.kind === "phase" ? r.phase.durationMs : r.script.durationMs;
+  var tracksOf = (r) => r.kind === "phase" ? r.phase.tracks : r.script.tracks;
+  var facingUntil = (keys, t) => {
+    let f;
+    for (const k of keys) {
+      if (k.atMs > t) break;
+      if (k.facing !== void 0) f = k.facing;
+    }
+    return f;
+  };
+  var MAX_STEPS = 1e4;
+  var TimingEngine = class {
+    constructor(data, options = {}) {
+      __publicField(this, "data", data);
+      __publicField(this, "phaseIndex");
+      __publicField(this, "opts");
+      __publicField(this, "listeners", /* @__PURE__ */ new Set());
+      __publicField(this, "started", false);
+      __publicField(this, "origin", 0);
+      /** 로컬 시간 기준 히트스톱 구간 (append-only, 시간순) */
+      __publicField(this, "freezes", []);
+      __publicField(this, "now", 0);
+      __publicField(this, "run", null);
+      __publicField(this, "ended", null);
+      __publicField(this, "queue", []);
+      __publicField(this, "seq", 0);
+      __publicField(this, "held", /* @__PURE__ */ new Set());
+      __publicField(this, "nageFacing", 1);
+      __publicField(this, "ukemi", null);
+      __publicField(this, "stats");
+      __publicField(this, "outbox", []);
+      this.opts = { initialMusubi: 50, musubiMax: 100, mirror: false, ...options };
+      this.phaseIndex = new Map(data.phases.map((p, i) => [p.id, i]));
+      this.stats = createStats(this.opts.initialMusubi);
+    }
+    // ───────────────────────────── public API ─────────────────────────────
+    on(fn) {
+      this.listeners.add(fn);
+      return () => this.listeners.delete(fn);
+    }
+    /** 기술 시작. nowMs 는 이후 press/release/update 와 같은 시계(performance.now 계열) */
+    start(nowMs) {
+      this.started = true;
+      this.origin = nowMs;
+      this.freezes = [];
+      this.now = 0;
+      this.run = null;
+      this.ended = null;
+      this.queue = [];
+      this.nageFacing = 1;
+      this.ukemi = null;
+      this.stats = createStats(this.opts.initialMusubi);
+      this.enterPhase(0);
+      return this.flush();
+    }
+    press(button, atMs, stick) {
+      this.queue.push({ kind: "press", button, stick, t: atMs, seq: this.seq++ });
+    }
+    release(button, atMs) {
+      this.queue.push({ kind: "release", button, t: atMs, seq: this.seq++ });
+    }
+    /** 매 프레임 호출. 큐의 입력과 예약 이벤트(구간 열림/닫힘, 페이즈 종료)를 시간순으로 처리 */
+    update(nowMs) {
+      if (!this.started) return [];
+      this.queue.sort((a, b) => a.t - b.t || a.seq - b.seq);
+      let i = 0;
+      for (; i < this.queue.length && this.queue[i].t <= nowMs; i++) {
+        const q = this.queue[i];
+        this.advanceTo(q.t);
+        this.applyInput(q);
+      }
+      this.queue.splice(0, i);
+      this.advanceTo(nowMs);
+      return this.flush();
+    }
+    getState(nowMs) {
+      const r = this.run;
+      return {
+        ended: this.ended,
+        kind: r?.kind ?? null,
+        id: r?.id ?? null,
+        stage: r ? this.stageOf(r) : null,
+        nowMs: this.now,
+        seqMs: r ? this.now - r.start : 0,
+        durationMs: r ? durationOf(r) : 0,
+        actors: r ? r.kind === "phase" ? r.phase.actors : r.script.actors : null,
+        tracks: r ? tracksOf(r) : null,
+        nageFacing: r?.inputFacing ?? this.nageFacing,
+        hitstop: nowMs !== void 0 && this.isFrozen(nowMs),
+        ukemi: this.ukemi,
+        stats: cloneStats(this.stats)
+      };
+    }
+    // ───────────────────────────── clock ─────────────────────────────
+    /** 절대시간 → 로컬 시간 (히트스톱 구간 동안 정지) */
+    toLocal(abs) {
+      let off = this.origin;
+      for (const f of this.freezes) {
+        const fAbs = f.start + off;
+        if (abs < fAbs) break;
+        if (abs < fAbs + f.dur) return f.start;
+        off += f.dur;
+      }
+      return abs - off;
+    }
+    isFrozen(abs) {
+      let off = this.origin;
+      for (const f of this.freezes) {
+        const fAbs = f.start + off;
+        if (abs >= fAbs && abs < fAbs + f.dur) return true;
+        off += f.dur;
+      }
+      return false;
+    }
+    advanceTo(abs) {
+      for (let step = 0; ; step++) {
+        if (step > MAX_STEPS) throw new Error("[TimingEngine] scheduler did not converge");
+        if (!this.run) break;
+        const next = this.nextScheduled(this.run);
+        if (next.at > this.toLocal(abs)) break;
+        this.now = Math.max(this.now, next.at);
+        next.fire();
+      }
+      this.now = Math.max(this.now, this.toLocal(abs));
+    }
+    nextScheduled(r) {
+      const end = {
+        at: r.start + durationOf(r),
+        pri: 3,
+        fire: () => r.kind === "phase" ? this.finishPhase(r) : this.finishScript(r)
+      };
+      if (r.kind !== "phase" || r.resolved || r.beatIdx >= r.beats.length) return end;
+      const b = r.beats[r.beatIdx];
+      const cands = [end];
+      if (b.type === "hold_release" && r.holdStart === null) {
+        cands.push({ at: r.start + (b.holdStartMaxMs ?? 0), pri: 0, fire: () => this.judge(r, "miss", null) });
+      }
+      if (!r.windowOpened) {
+        cands.push({
+          at: r.start + b.targetMs + b.window.early[0],
+          pri: 1,
+          fire: () => {
+            r.windowOpened = true;
+            this.emit({
+              type: "windowOpen",
+              phaseId: r.id,
+              beat: r.beatIdx,
+              beats: r.beats.length,
+              targetAtMs: r.start + b.targetMs,
+              atMs: this.now
+            });
+          }
+        });
+      }
+      cands.push({
+        at: r.start + b.targetMs + b.window.late[1],
+        pri: 2,
+        fire: () => {
+          if (b.type === "hold_release" && r.holdStart !== null) this.judge(r, "late", b.window.late[1]);
+          else this.judge(r, "miss", null);
+        }
+      });
+      return cands.reduce((a, c) => c.at < a.at || c.at === a.at && c.pri < a.pri ? c : a);
+    }
+    // ───────────────────────────── input ─────────────────────────────
+    applyInput(q) {
+      if (q.kind === "release") {
+        this.held.delete(q.button);
+        this.onRelease(q.button);
+        return;
+      }
+      if (this.held.has(q.button)) {
+        this.ignore(q.button, "repeat");
+        return;
+      }
+      this.held.add(q.button);
+      this.onPress(q.button, q.stick);
+    }
+    ignore(button, reason) {
+      const r = this.run;
+      this.emit({
+        type: "inputIgnored",
+        button,
+        reason,
+        phaseId: r?.kind === "phase" ? r.id : null,
+        seqMs: r ? this.now - r.start : 0,
+        atMs: this.now
+      });
+    }
+    currentBeat() {
+      const r = this.run;
+      if (!r || r.kind !== "phase" || r.resolved || r.beatIdx >= r.beats.length) return null;
+      return { r, b: r.beats[r.beatIdx] };
+    }
+    onPress(button, stick) {
+      const cur = this.currentBeat();
+      if (!cur) return this.ignore(button, "idle");
+      if (cur.b.button !== button) return this.ignore(button, "button");
+      const { r, b } = cur;
+      const t = this.now - r.start;
+      if (b.type === "hold_release") {
+        if (r.holdStart === null && t < (b.holdStartMaxMs ?? 0)) {
+          r.holdStart = this.now;
+          this.emit({ type: "holdStart", phaseId: r.id, beat: r.beatIdx, atMs: this.now });
+        } else {
+          this.ignore(button, "hold_late");
+        }
+        return;
+      }
+      const d = t - b.targetMs;
+      const g = gradeOffset(b.window, d);
+      if (g === null) return this.ignore(button, "outside_window");
+      if (b.type === "direction_press" && this.relDirection(stick, r.inputFacing) !== b.direction) {
+        this.judge(r, "miss", d, true);
+        return;
+      }
+      this.judge(r, g, d);
+    }
+    onRelease(button) {
+      const cur = this.currentBeat();
+      if (!cur) return;
+      const { r, b } = cur;
+      if (b.type !== "hold_release" || b.button !== button || r.holdStart === null) return;
+      const d = this.now - r.start - b.targetMs;
+      const g = d < b.window.early[0] ? "early" : gradeOffset(b.window, d) ?? "late";
+      this.judge(r, g, d);
+    }
+    /** 화면 방향 입력 → nage facing 기준 상대 방향 */
+    relDirection(stick, facing) {
+      if (!stick) return void 0;
+      if (stick === "UP" || stick === "DOWN") return stick;
+      const world = stick === "RIGHT" ? 1 : -1;
+      const tech = this.opts.mirror ? -world : world;
+      return tech === facing ? "FORWARD" : "BACK";
+    }
+    // ───────────────────────────── judgement ─────────────────────────────
+    judge(r, grade, offsetMs, wrongDirection = false) {
+      const beat = r.beatIdx;
+      recordGrade(this.stats, r.phase.stage, grade);
+      this.emit({
+        type: "judged",
+        phaseId: r.id,
+        stage: r.phase.stage,
+        beat,
+        beats: r.beats.length,
+        grade,
+        offsetMs,
+        wrongDirection,
+        atMs: this.now
+      });
+      r.beatGrades.push(grade);
+      r.beatIdx++;
+      r.windowOpened = false;
+      r.holdStart = null;
+      const input2 = r.phase.input;
+      if (input2.type !== "sequence") {
+        this.resolve(r, grade);
+        return;
+      }
+      if (grade !== "perfect" && (input2.breakOn ?? ["miss"]).includes(grade)) {
+        this.resolve(r, grade);
+        return;
+      }
+      const eff = grade === "miss" ? void 0 : input2.beatEffects?.[grade];
+      if (eff) this.applyEffect(eff, r.id);
+      if (r.beatIdx >= r.beats.length) {
+        this.resolve(r, r.beatGrades.every((g) => g === "perfect") ? "perfect" : "clear");
+        return;
+      }
+      const next = r.beats[r.beatIdx];
+      if (next.type === "hold_release" && this.held.has(next.button)) r.holdStart = this.now;
+    }
+    resolve(r, key) {
+      const o = r.phase.outcomes[key];
+      if (!o) throw new Error(`[TimingEngine] phase '${r.id}': outcomes.${key} 가 정의되지 않음`);
+      r.resolved = true;
+      this.applyEffect(o, r.id);
+      this.emit({ type: "resolved", phaseId: r.id, stage: r.phase.stage, result: key, goto: o.goto, atMs: this.now });
+      const interrupt = o.interrupt ?? (o.goto.startsWith("branch:") || o.goto === "end:fail");
+      if (interrupt) this.goto(o.goto);
+      else r.pending = o.goto;
+    }
+    applyEffect(e, phaseId) {
+      if (e.score) this.stats.score += e.score;
+      if (e.musubi) this.addMusubi(e.musubi);
+      if (e.reaction) this.emit({ type: "reaction", phaseId, reaction: e.reaction, atMs: this.now });
+      if (e.fx) this.emit({ type: "fx", anim: e.fx, atMs: this.now });
+      if (e.hitstopMs) {
+        this.freezes.push({ start: this.now, dur: e.hitstopMs });
+        this.emit({ type: "hitstop", durationMs: e.hitstopMs, atMs: this.now });
+      }
+    }
+    addMusubi(delta) {
+      this.stats.musubi = Math.min(this.opts.musubiMax, Math.max(0, this.stats.musubi + delta));
+    }
+    // ───────────────────────────── transitions ─────────────────────────────
+    finishPhase(r) {
+      while (this.run === r && !r.resolved && r.beatIdx < r.beats.length) this.judge(r, "miss", null);
+      if (this.run !== r) return;
+      if (!r.resolved) {
+        this.resolve(r, "auto");
+        if (this.run !== r) return;
+      }
+      if (r.pending) this.goto(r.pending);
+    }
+    finishScript(r) {
+      this.goto(r.script.result.goto);
+    }
+    goto(g) {
+      this.leaveRun();
+      if (g.startsWith("phase:")) {
+        const id = g.slice(6);
+        const idx = this.phaseIndex.get(id);
+        if (idx === void 0) throw new Error(`[TimingEngine] 없는 phase '${id}'`);
+        this.enterPhase(idx);
+      } else if (g.startsWith("branch:")) {
+        const id = g.slice(7);
+        const script = this.data.branches[id];
+        if (!script) throw new Error(`[TimingEngine] 없는 branch '${id}'`);
+        this.enterScript("branch", id, script);
+      } else if (g === "ukemi") {
+        const cfg = this.data.ukemi;
+        if (!cfg) throw new Error(`[TimingEngine] '${this.data.id}' 에 ukemi 정의가 없음`);
+        const summary = summarizeForUkemi(this.stats, cfg.countStages);
+        const result = deriveUkemi(summary, cfg.rules);
+        this.ukemi = result;
+        this.emit({ type: "ukemi", result, successes: summary.successes, checks: summary.checks, atMs: this.now });
+        this.enterScript("ukemi", result, cfg.results[result]);
+      } else {
+        this.run = null;
+        this.ended = g === "end:success" ? "success" : "fail";
+        this.emit({ type: "end", result: this.ended, ukemi: this.ukemi, stats: cloneStats(this.stats), atMs: this.now });
+      }
+    }
+    leaveRun() {
+      const r = this.run;
+      if (!r) return;
+      const f = facingUntil(tracksOf(r).nage, this.now - r.start);
+      if (f !== void 0) this.nageFacing = f;
+    }
+    enterPhase(idx) {
+      const phase = this.data.phases[idx];
+      const f0 = facingUntil(phase.tracks.nage, 0);
+      if (f0 !== void 0) this.nageFacing = f0;
+      const r = {
+        kind: "phase",
+        id: phase.id,
+        phase,
+        start: this.now,
+        beats: beatsOf(phase.input),
+        beatIdx: 0,
+        beatGrades: [],
+        windowOpened: false,
+        holdStart: null,
+        resolved: false,
+        pending: null,
+        inputFacing: this.nageFacing
+      };
+      this.run = r;
+      this.emit({ type: "enter", kind: "phase", id: phase.id, stage: phase.stage, atMs: this.now });
+      const b0 = r.beats[0];
+      if (b0?.type === "hold_release" && this.held.has(b0.button)) r.holdStart = this.now;
+    }
+    enterScript(kind, id, script) {
+      const f0 = facingUntil(script.tracks.nage, 0);
+      if (f0 !== void 0) this.nageFacing = f0;
+      this.run = { kind, id, script, start: this.now, inputFacing: this.nageFacing };
+      this.emit({ type: "enter", kind, id, stage: kind === "ukemi" ? "throw" : null, atMs: this.now });
+      const { damage, musubi, score } = script.result;
+      if (damage) this.stats.damage += damage;
+      if (musubi) this.addMusubi(musubi);
+      if (score) this.stats.score += score;
+    }
+    stageOf(r) {
+      if (r.kind === "phase") return r.phase.stage;
+      return r.kind === "ukemi" ? "throw" : null;
+    }
+    // ───────────────────────────── events ─────────────────────────────
+    emit(e) {
+      this.outbox.push(e);
+    }
+    /** 리스너는 update() 종료 시점에 일괄 호출 → 리스너 안에서 press() 등을 불러도 재진입 안전 */
+    flush() {
+      const out = this.outbox;
+      this.outbox = [];
+      for (const e of out) for (const fn of this.listeners) fn(e);
+      return out;
+    }
+  };
+
+  // src/render/clock.ts
+  var GameClock = class {
+    constructor(realNow) {
+      __publicField(this, "realRef");
+      __publicField(this, "virtRef", 0);
+      __publicField(this, "rate", 1);
+      __publicField(this, "paused", false);
+      this.realRef = realNow;
+    }
+    get scale() {
+      return this.paused ? 0 : this.rate;
+    }
+    toVirtual(real) {
+      return this.virtRef + (real - this.realRef) * this.scale;
+    }
+    setScale(scale, real) {
+      this.rebase(real);
+      this.rate = scale;
+    }
+    pause(real) {
+      if (this.paused) return;
+      this.rebase(real);
+      this.paused = true;
+    }
+    resume(real) {
+      if (!this.paused) return;
+      this.rebase(real);
+      this.paused = false;
+    }
+    rebase(real) {
+      this.virtRef = this.toVirtual(real);
+      this.realRef = real;
+    }
+  };
+
+  // src/render/poseTracker.ts
+  var sampleTrack = (keys, t, ease2) => {
+    const prop = (p) => {
+      let prev;
+      for (const k of keys) {
+        const v = k[p];
+        if (v === void 0) continue;
+        if (k.atMs <= t) {
+          prev = k;
+          continue;
+        }
+        if (!prev) return v;
+        const name = k.ease ?? "Linear";
+        const pv = prev[p];
+        if (name === "Stepped") return pv;
+        const span = k.atMs - prev.atMs;
+        return pv + (v - pv) * ease2(name)(span > 0 ? (t - prev.atMs) / span : 1);
+      }
+      return prev?.[p] ?? 0;
+    };
+    let facing;
+    let depth;
+    for (const k of keys) {
+      if (k.atMs > t) break;
+      if (k.facing !== void 0) facing = k.facing;
+      if (k.depth !== void 0) depth = k.depth;
+    }
+    return { x: prop("x"), y: prop("y"), facing, depth };
+  };
+  var frameAt = (def, elapsedMs) => {
+    const n = def.end - def.start + 1;
+    const tick = 1e3 / def.frameRate;
+    const dur = (i) => tick * (def.holds?.[String(i)] ?? 1);
+    let total = 0;
+    for (let i = 0; i < n; i++) total += dur(i);
+    let t = Math.max(0, elapsedMs);
+    const repeat = def.repeat ?? 0;
+    if (repeat === -1) t %= total;
+    else if (t >= total * (repeat + 1)) return n - 1;
+    else t %= total;
+    for (let i = 0; i < n; i++) {
+      const d = dur(i);
+      if (t < d) return i;
+      t -= d;
+    }
+    return n - 1;
+  };
+  var frameOffset = (def, frame) => def?.frameOffsets?.find((f) => f.frame === frame) ?? { x: 0, y: 0 };
+  var PoseTracker = class {
+    constructor(data, anims, ease2) {
+      __publicField(this, "data", data);
+      __publicField(this, "anims", anims);
+      __publicField(this, "ease", ease2);
+      __publicField(this, "run", null);
+      __publicField(this, "entry", { x: 0, y: 0 });
+      __publicField(this, "carry", { nage: { facing: 1, depth: 10 }, uke: { facing: -1, depth: 10 } });
+      __publicField(this, "endAt", null);
+    }
+    reset() {
+      this.run = null;
+      this.entry = { x: 0, y: 0 };
+      this.carry = { nage: { facing: 1, depth: 10 }, uke: { facing: -1, depth: 10 } };
+      this.endAt = null;
+    }
+    onEvent(e) {
+      if (e.type === "enter") this.enter(e.kind, e.id, e.atMs);
+      else if (e.type === "end") this.endAt = e.atMs;
+    }
+    get active() {
+      return this.run !== null;
+    }
+    /** localMs: 엔진 로컬 시간(EngineState.nowMs). quantizeMs>0 이면 시퀀스 시간을 격자로 끊어 스내피하게 */
+    poseAt(localMs, quantizeMs = 0) {
+      const r = this.run;
+      if (!r) return null;
+      let t = Math.max(0, Math.min(localMs, this.endAt ?? Infinity) - r.start);
+      if (quantizeMs > 0) t = Math.floor(t / quantizeMs) * quantizeMs;
+      const ns = sampleTrack(r.tracks.nage, t, this.ease);
+      const us = sampleTrack(r.tracks.uke, t, this.ease);
+      const nx = r.script ? this.entry.x + ns.x : ns.x;
+      const ny = r.script ? this.entry.y + ns.y : ns.y;
+      return {
+        nage: this.actor("nage", r, t, nx, ny, ns),
+        uke: this.actor("uke", r, t, nx + us.x, ny + us.y, us)
+      };
+    }
+    actor(a, r, t, x, y, s) {
+      const slot = r.actors[a];
+      const def = this.anims[slot.anim];
+      const frame = def ? frameAt(def, t - (slot.startAtMs ?? 0)) : 0;
+      const off = frameOffset(def, frame);
+      return {
+        x,
+        y,
+        facing: s.facing ?? this.carry[a].facing,
+        depth: s.depth ?? this.carry[a].depth,
+        anim: slot.anim,
+        frame,
+        offX: off.x,
+        offY: off.y
+      };
+    }
+    lookup(kind, id) {
+      if (kind === "phase") {
+        const p = this.data.phases.find((ph) => ph.id === id);
+        if (!p) throw new Error(`unknown phase ${id}`);
+        return { tracks: p.tracks, actors: p.actors, script: false };
+      }
+      const s = kind === "branch" ? this.data.branches[id] : this.data.ukemi?.results[id];
+      if (!s) throw new Error(`unknown ${kind} ${id}`);
+      return { tracks: s.tracks, actors: s.actors, script: true };
+    }
+    enter(kind, id, at) {
+      const prev = this.run;
+      if (prev) {
+        const t = at - prev.start;
+        const ns = sampleTrack(prev.tracks.nage, t, this.ease);
+        this.entry = prev.script ? { x: this.entry.x + ns.x, y: this.entry.y + ns.y } : { x: ns.x, y: ns.y };
+        for (const a of ["nage", "uke"]) {
+          const s = a === "nage" ? ns : sampleTrack(prev.tracks.uke, t, this.ease);
+          if (s.facing !== void 0) this.carry[a].facing = s.facing;
+          if (s.depth !== void 0) this.carry[a].depth = s.depth;
+        }
+      }
+      this.run = { ...this.lookup(kind, id), start: at };
+      this.endAt = null;
+    }
+  };
+
+  // src/prototype/TimingDebugger.ts
+  var GRADE_COLOR = {
+    perfect: 2278750,
+    early: 16436245,
+    late: 16347926,
+    miss: 15680580
+  };
+  var hex = (c) => `#${c.toString(16).padStart(6, "0")}`;
+  var fmtMs = (ms) => `${ms >= 0 ? "+" : ""}${Math.round(ms)}ms`;
+  var STAGE_LABEL = { recognition: "1 인지", entry: "2 진입", throw: "3 던지기" };
+  var IGNORED = 7434618;
+  var MAX_MARKS = 12;
+  var MAX_LOG = 5;
+  var FONT = { fontFamily: "monospace", fontSize: "9px", color: "#e4e4e7" };
+  var TimingDebugger = class {
+    constructor(scene, data, layer, x = 16, y = 304, w = 608) {
+      __publicField(this, "data", data);
+      __publicField(this, "x", x);
+      __publicField(this, "y", y);
+      __publicField(this, "w", w);
+      __publicField(this, "g");
+      __publicField(this, "title");
+      __publicField(this, "clock");
+      __publicField(this, "markTexts", []);
+      __publicField(this, "logTexts", []);
+      __publicField(this, "phase", null);
+      __publicField(this, "beats", []);
+      __publicField(this, "phaseStart", 0);
+      __publicField(this, "marks", []);
+      __publicField(this, "log", []);
+      __publicField(this, "barY");
+      this.barY = y + 14;
+      this.g = scene.add.graphics();
+      this.title = scene.add.text(x, y + 1, "", FONT);
+      this.clock = scene.add.text(x + w, y + 1, "", FONT).setOrigin(1, 0);
+      for (let i = 0; i < MAX_MARKS; i++) this.markTexts.push(scene.add.text(0, 0, "", FONT).setOrigin(0.5, 0).setVisible(false));
+      for (let i = 0; i < MAX_LOG; i++) this.logTexts.push(scene.add.text(0, y + 45, "", FONT));
+      layer.add([this.g, this.title, this.clock, ...this.markTexts, ...this.logTexts]);
+    }
+    reset() {
+      this.phase = null;
+      this.beats = [];
+      this.marks = [];
+      this.log = [];
+    }
+    onEvent(e) {
+      switch (e.type) {
+        case "enter":
+          if (e.kind === "phase") {
+            this.phase = this.data.phases.find((p) => p.id === e.id) ?? null;
+            this.beats = this.phase ? beatsOf(this.phase.input) : [];
+            this.phaseStart = e.atMs;
+            this.marks = [];
+          }
+          break;
+        case "judged": {
+          const b = this.beats[e.beat];
+          if (!b) break;
+          const color = GRADE_COLOR[e.grade];
+          const hasInput = e.offsetMs !== null;
+          let label = hasInput ? fmtMs(e.offsetMs) : "MISS";
+          if (e.wrongDirection) label = `방향✗ ${label}`;
+          this.marks.push({ ms: hasInput ? b.targetMs + e.offsetMs : windowBounds(b).close, color, label, ignored: false });
+          const tag = e.beats > 1 ? `${e.phaseId}#${e.beat + 1}` : e.phaseId;
+          this.log.push({ text: `${tag} ${e.grade.toUpperCase()} ${label}`, color });
+          if (this.log.length > MAX_LOG) this.log.shift();
+          break;
+        }
+        case "inputIgnored":
+          if (this.phase && e.phaseId === this.phase.id && e.reason !== "repeat")
+            this.marks.push({ ms: e.seqMs, color: IGNORED, label: "×", ignored: true });
+          break;
+        default:
+          break;
+      }
+      if (this.marks.length > MAX_MARKS) this.marks.splice(0, this.marks.length - MAX_MARKS);
+    }
+    draw(state) {
+      const { g, x, w, barY } = this;
+      g.clear();
+      g.fillStyle(592139, 0.94).fillRect(0, this.y - 2, 640, 360 - this.y + 2);
+      g.fillStyle(2565930).fillRect(0, this.y - 2, 640, 1);
+      const p = this.phase;
+      if (!p) {
+        this.title.setText("TIMING DEBUGGER — 우케 접근 대기");
+        this.clock.setText("");
+        this.markTexts.forEach((t) => t.setVisible(false));
+        this.drawLog();
+        return;
+      }
+      const dur = p.durationMs;
+      const px = (ms) => Math.round(x + phaser_global_default.Math.Clamp(ms, 0, dur) / dur * w);
+      const seg = (T, [a, b], c) => g.fillStyle(c, 0.85).fillRect(px(T + a), barY, Math.max(1, px(T + b) - px(T + a)), 10);
+      g.fillStyle(2565930).fillRect(x, barY, w, 10);
+      for (let t = 100; t < dur; t += 100) g.fillStyle(4144966).fillRect(px(t), barY, 1, 10);
+      for (const b of this.beats) {
+        seg(b.targetMs, b.window.early, GRADE_COLOR.early);
+        seg(b.targetMs, b.window.perfect, GRADE_COLOR.perfect);
+        seg(b.targetMs, b.window.late, GRADE_COLOR.late);
+        g.fillStyle(16777215).fillRect(px(b.targetMs), barY - 2, 1, 14);
+        if (b.type === "hold_release" && b.holdStartMaxMs !== void 0)
+          g.fillStyle(2282478, 0.6).fillRect(px(0), barY + 4, px(b.holdStartMaxMs) - px(0), 2);
+      }
+      const live = state?.kind === "phase" && state.id === p.id;
+      const cur = live ? state.nowMs - this.phaseStart : null;
+      if (cur !== null) g.fillStyle(state?.hitstop ? 16777215 : 2282478).fillRect(px(cur) - 1, barY - 3, 2, 16);
+      this.markTexts.forEach((t) => t.setVisible(false));
+      let lastLabelX = -Infinity;
+      this.marks.forEach((m, i) => {
+        const mx = px(m.ms);
+        if (m.ignored) {
+          g.fillStyle(m.color).fillRect(mx, barY + 11, 1, 5);
+        } else {
+          g.fillStyle(m.color).fillTriangle(mx, barY + 11, mx - 3, barY + 17, mx + 3, barY + 17);
+        }
+        const t = this.markTexts[i];
+        if (!m.ignored || mx - lastLabelX > 8) {
+          const row = mx - lastLabelX < 44 && !m.ignored ? 1 : 0;
+          t.setText(m.label).setColor(hex(m.color)).setPosition(mx, barY + 18 + row * 8).setVisible(true);
+          lastLabelX = mx;
+        }
+      });
+      const kind = input(p);
+      this.title.setText(`[${STAGE_LABEL[p.stage]}] ${p.label.ko}  ·  ${kind}`);
+      const shown = cur ?? (state?.kind === "phase" ? 0 : null);
+      const status = live ? "" : state?.kind ? `  → ${state.kind}:${state.id}` : "";
+      this.clock.setText(`${shown === null ? "—" : Math.round(shown)} / ${dur}ms${state?.hitstop ? "  HITSTOP" : ""}${status}`);
+      this.drawLog();
+    }
+    drawLog() {
+      let lx = this.x;
+      this.logTexts.forEach((t, i) => {
+        const entry = this.log[i];
+        if (!entry) return t.setVisible(false);
+        t.setText(entry.text).setColor(hex(entry.color)).setPosition(lx, this.y + 45).setVisible(true);
+        lx += t.width + 12;
+      });
+    }
+  };
+  var input = (p) => {
+    const i = p.input;
+    if (i.type === "none") return "입력 없음";
+    if (i.type === "sequence") return `연속 입력 ×${i.beats.length}`;
+    return i.type === "direction_press" ? `방향(${i.direction}) + ${i.button}` : i.type === "hold_release" ? `홀드→릴리즈 ${i.button}` : i.button;
+  };
+
+  // src/prototype/PrototypeScene.ts
+  var TECH = shomenuchi_iriminage_ura_default;
+  var ANIMS = {
+    ...common_default.animations,
+    ...TECH.animations.exclusive
+  };
+  var C = {
+    bg: 1579035,
+    floor: 5395035,
+    mat: 2565930,
+    nage: 3900150,
+    nageLight: 9684477,
+    uke: 15680580,
+    ukeLight: 16557477
+  };
+  var UKEMI_COLOR = { perfect: 2278750, sloppy: 16436245, crash: 15680580 };
+  var GRADE_TEXT = { perfect: "PERFECT", early: "EARLY", late: "LATE", miss: "MISS" };
+  var REACTION_TEXT = { whiff: "헛스윙!", hit: "피격!", clash: "충돌!", pushback: "밀려남" };
+  var SPEEDS = [1, 0.5, 0.25];
+  var BODY_W = 16;
+  var BODY_H = 40;
+  var APPROACH_FROM = 260;
+  var SNAP_MS = 1e3 / ANIM_FPS.DEFAULT;
+  var MAAI_X = TECH.phases[0].tracks.uke[0].x ?? 80;
+  var easeCache = /* @__PURE__ */ new Map();
+  var ease = (name) => {
+    let f = easeCache.get(name);
+    if (!f) {
+      f = phaser_global_default.Tweens.Builders.GetEaseFunction(name);
+      easeCache.set(name, f);
+    }
+    return f;
+  };
+  var bodyPose = (p) => {
+    if (/(ukemi_back|ukemi_sloppy|crash|down)$/.test(p.anim) && p.frame >= 2) return "lying";
+    if (/thrown$/.test(p.anim) && p.frame >= 3) return "lying";
+    return "stand";
+  };
+  var armPose = (p) => {
+    if (/windup$/.test(p.anim)) return p.frame >= 1 ? "up" : "rest";
+    if (/shomenuchi_strike$/.test(p.anim)) return p.frame <= 1 ? "up" : "strike";
+    if (/(irimi_awase|throw_cut|lead_shoulder|whiff_hit)$/.test(p.anim) && p.frame >= 1) return "strike";
+    return "rest";
+  };
+  var shortAnim = (key) => key.split(".").pop() ?? key;
+  var PrototypeScene = class extends phaser_global_default.Scene {
+    constructor() {
+      super("prototype");
+      __publicField(this, "clock");
+      __publicField(this, "engine", null);
+      __publicField(this, "tracker");
+      __publicField(this, "dbg");
+      __publicField(this, "state", null);
+      __publicField(this, "mode", "ready");
+      __publicField(this, "mirror", false);
+      __publicField(this, "snappy", true);
+      __publicField(this, "labels", true);
+      __publicField(this, "speedIdx", 0);
+      __publicField(this, "round", 0);
+      __publicField(this, "approach", { start: 0, speed: 0.15 });
+      __publicField(this, "fx", []);
+      __publicField(this, "push", null);
+      __publicField(this, "branchLabel", null);
+      __publicField(this, "worldLayer");
+      __publicField(this, "uiLayer");
+      __publicField(this, "world");
+      __publicField(this, "fxG");
+      __publicField(this, "hudG");
+      __publicField(this, "overlay");
+      __publicField(this, "popup");
+      __publicField(this, "nageLabel");
+      __publicField(this, "ukeLabel");
+      __publicField(this, "maaiText");
+      __publicField(this, "hudLeft");
+      __publicField(this, "hudRight");
+      __publicField(this, "stageTexts", []);
+      __publicField(this, "phaseText");
+      __publicField(this, "hintText");
+      __publicField(this, "panel");
+      __publicField(this, "centerText");
+    }
+    create() {
+      this.cameras.main.setBackgroundColor(C.bg);
+      this.clock = new GameClock(this.game.loop.now);
+      this.worldLayer = this.add.layer();
+      this.uiLayer = this.add.layer();
+      const uiCam = this.cameras.add(0, 0, GAME_WIDTH, GAME_HEIGHT);
+      uiCam.ignore(this.worldLayer);
+      this.cameras.main.ignore(this.uiLayer);
+      const font = (size, color = "#e4e4e7") => ({ fontFamily: "monospace", fontSize: `${size}px`, color });
+      this.world = this.add.graphics();
+      this.fxG = this.add.graphics();
+      this.nageLabel = this.add.text(0, 0, "", font(8, "#93c5fd")).setOrigin(0.5, 1);
+      this.ukeLabel = this.add.text(0, 0, "", font(8, "#fca5a5")).setOrigin(0.5, 1);
+      this.maaiText = this.add.text(0, 0, "", font(9)).setOrigin(0.5, 1);
+      this.popup = this.add.text(GAME_WIDTH / 2, 118, "", {
+        ...font(22),
+        fontStyle: "bold",
+        align: "center",
+        stroke: "#000000",
+        strokeThickness: 4
+      }).setOrigin(0.5).setAlpha(0);
+      this.worldLayer.add([this.world, this.fxG, this.nageLabel, this.ukeLabel, this.maaiText, this.popup]);
+      this.hudG = this.add.graphics();
+      this.hudLeft = this.add.text(8, 6, "", font(10));
+      this.hudRight = this.add.text(GAME_WIDTH - 8, 6, "", font(9, "#a1a1aa")).setOrigin(1, 0);
+      const help = this.add.text(GAME_WIDTH - 8, 19, "Z 입력 · ←→ 방향 · R 재시작 · M 반전 · T 배속 · Q 스냅 · D 라벨", font(8, "#71717a")).setOrigin(1, 0);
+      this.stageTexts = ["① 인지", "② 진입", "③ 던지기"].map((s, i) => this.add.text(GAME_WIDTH / 2 + (i - 1) * 64, 34, s, font(10, "#52525b")).setOrigin(0.5, 0));
+      this.phaseText = this.add.text(GAME_WIDTH / 2, 50, "", font(12)).setOrigin(0.5, 0);
+      this.hintText = this.add.text(GAME_WIDTH / 2, 66, "", font(10, "#a1a1aa")).setOrigin(0.5, 0);
+      this.panel = this.add.rectangle(GAME_WIDTH / 2, 160, 420, 118, 592139, 0.88).setStrokeStyle(1, 4144966);
+      this.centerText = this.add.text(GAME_WIDTH / 2, 160, "", { ...font(11), align: "center", lineSpacing: 4 }).setOrigin(0.5);
+      this.overlay = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 16777215, 1).setOrigin(0).setAlpha(0);
+      this.uiLayer.add([this.hudG, this.hudLeft, this.hudRight, help, ...this.stageTexts, this.phaseText, this.hintText, this.panel, this.centerText, this.overlay]);
+      this.dbg = new TimingDebugger(this, TECH, this.uiLayer);
+      this.tracker = new PoseTracker(TECH, ANIMS, ease);
+      bindKeyboard(this, () => this.mode === "technique" ? this.engine : null, (t) => this.clock.toVirtual(t));
+      const kb = this.input.keyboard;
+      kb.on("keydown-ENTER", () => {
+        if (this.mode === "ready" || this.mode === "result") this.startRound();
+      });
+      kb.on("keydown-Z", () => {
+        if (this.mode === "ready") this.startRound();
+      });
+      kb.on("keydown-R", () => this.startRound());
+      kb.on("keydown-M", () => {
+        this.mirror = !this.mirror;
+        if (this.mode !== "ready") this.startRound();
+      });
+      kb.on("keydown-T", () => {
+        this.speedIdx = (this.speedIdx + 1) % SPEEDS.length;
+        this.clock.setScale(SPEEDS[this.speedIdx], this.game.loop.now);
+        this.tweens.timeScale = SPEEDS[this.speedIdx];
+      });
+      kb.on("keydown-Q", () => {
+        this.snappy = !this.snappy;
+      });
+      kb.on("keydown-D", () => {
+        this.labels = !this.labels;
+      });
+      this.game.events.on(phaser_global_default.Core.Events.HIDDEN, () => this.clock.pause(performance.now()));
+      this.game.events.on(phaser_global_default.Core.Events.VISIBLE, () => this.clock.resume(performance.now()));
+      window.__aikido = this;
+      this.showReady();
+    }
+    /** 콘솔/자동화 테스트용 스냅샷 */
+    debugSnapshot() {
+      return { mode: this.mode, round: this.round, mirror: this.mirror, speed: SPEEDS[this.speedIdx], state: this.state };
+    }
+    update() {
+      const now = this.vNow();
+      if (this.mode === "approach" && this.engine) {
+        const startAt = this.approach.start + (APPROACH_FROM - MAAI_X) / this.approach.speed;
+        if (now >= startAt) {
+          this.mode = "technique";
+          this.handle(this.engine.start(startAt));
+        }
+      }
+      if (this.engine && (this.mode === "technique" || this.mode === "result")) {
+        this.handle(this.engine.update(now));
+        this.state = this.engine.getState(now);
+      }
+      this.render(now);
+    }
+    // ───────────────────────────── flow ─────────────────────────────
+    vNow() {
+      return this.clock.toVirtual(this.game.loop.now);
+    }
+    originX() {
+      return this.mirror ? 420 : 220;
+    }
+    showReady() {
+      this.mode = "ready";
+      this.panel.setVisible(true);
+      this.centerText.setVisible(true).setColor("#e4e4e7").setText([
+        "合気 TIMING PROTOTYPE",
+        `${TECH.name.ko}`,
+        "",
+        "Enter / Z : 시작",
+        "Z : 기술 입력   ← → : 방향 (텐칸 = 뒤쪽 + Z)",
+        "R 재시작 · M 좌우반전 · T 배속 · Q 스냅 · D 라벨"
+      ].join("\n"));
+      this.phaseText.setText("");
+      this.hintText.setText("");
+    }
+    startRound() {
+      this.round++;
+      this.engine = new TimingEngine(TECH, { mirror: this.mirror });
+      this.tracker.reset();
+      this.dbg.reset();
+      this.state = null;
+      this.fx = [];
+      this.push = null;
+      this.branchLabel = null;
+      this.mode = "approach";
+      this.approach = { start: this.vNow(), speed: phaser_global_default.Math.FloatBetween(0.09, 0.2) };
+      this.panel.setVisible(false);
+      this.centerText.setVisible(false);
+      this.tweens.killTweensOf(this.popup);
+      this.popup.setAlpha(0);
+      this.phaseText.setText("우케 접근 중 — 마아이를 읽어라").setColor("#a1a1aa");
+      this.hintText.setText("");
+    }
+    // ───────────────────────────── engine events ─────────────────────────────
+    handle(events) {
+      for (const e of events) {
+        this.tracker.onEvent(e);
+        this.dbg.onEvent(e);
+        switch (e.type) {
+          case "enter":
+            this.onEnter(e);
+            break;
+          case "judged":
+            this.onJudged(e);
+            break;
+          case "reaction":
+            this.onReaction(e);
+            break;
+          case "hitstop":
+            this.onHitstop(e.durationMs);
+            break;
+          case "fx":
+            this.onFx(e);
+            break;
+          case "ukemi":
+            this.showPopup(`受け身 ${e.result.toUpperCase()}`, UKEMI_COLOR[e.result], `Perfect ${e.successes}/${e.checks}`);
+            break;
+          case "end":
+            this.onEnd(e);
+            break;
+          default:
+            break;
+        }
+      }
+    }
+    onEnter(e) {
+      if (e.kind === "phase") {
+        const p = TECH.phases.find((ph) => ph.id === e.id);
+        this.phaseText.setText(p.label.ko).setColor("#e4e4e7");
+      } else if (e.kind === "branch") {
+        const b = TECH.branches[e.id];
+        this.branchLabel = b.label.ko;
+        this.phaseText.setText(b.label.ko).setColor("#f87171");
+        if (b.result.damage) {
+          this.flash(15680580, 0.3, 160);
+          this.cameras.main.shake(this.real(180), 0.012);
+        }
+      } else {
+        const u = TECH.ukemi.results[e.id];
+        this.phaseText.setText(u.label.ko).setColor(hex(UKEMI_COLOR[e.id]));
+      }
+    }
+    onJudged(e) {
+      const title = GRADE_TEXT[e.grade] + (e.beats > 1 ? ` ${e.beat + 1}/${e.beats}` : "");
+      const sub = e.wrongDirection ? "방향 틀림" : e.offsetMs === null ? "무입력" : fmtMs(e.offsetMs);
+      this.showPopup(title, GRADE_COLOR[e.grade], sub);
+    }
+    onReaction(e) {
+      const pose = this.tracker.poseAt(e.atMs);
+      if (!pose) return;
+      const n = this.anchorOf(pose.nage);
+      const u = this.anchorOf(pose.uke);
+      const { type, px } = e.reaction;
+      this.floatText(`${REACTION_TEXT[type]}${px ? ` ${px}px` : ""}`, n.x, n.top - 14, type === "whiff" ? 16436245 : 16347926);
+      const dir = pose.nage.facing * (this.mirror ? -1 : 1);
+      if (type === "whiff") this.fx.push({ kind: "ghost", x: n.x, y: n.top, start: e.atMs, dur: 220, color: C.nageLight, dir });
+      if (type === "clash") {
+        this.fx.push({ kind: "spark", x: (n.x + u.x) / 2, y: n.chest, start: e.atMs, dur: 220, color: 16347926, dir });
+        this.cameras.main.shake(this.real(90), 6e-3);
+      }
+      if (type === "hit") this.flash(15680580, 0.25, 120);
+      if (px) this.push = { px, start: e.atMs, dur: 240 };
+    }
+    onHitstop(ms) {
+      const intensity = 8e-3 + Math.max(0, ms - 100) * 8e-5;
+      this.cameras.main.shake(this.real(ms), intensity);
+      this.flash(16777215, 0.35, ms);
+    }
+    onFx(e) {
+      const pose = this.tracker.poseAt(e.atMs);
+      if (!pose) return;
+      const n = this.anchorOf(pose.nage);
+      const u = this.anchorOf(pose.uke);
+      const dir = pose.nage.facing * (this.mirror ? -1 : 1);
+      if (e.anim.endsWith("hit_spark")) this.fx.push({ kind: "spark", x: u.x, y: u.chest, start: e.atMs, dur: 260, color: 16638023, dir });
+      else this.fx.push({ kind: "ring", x: (n.x + u.x) / 2, y: n.chest, start: e.atMs, dur: 420, color: 2282478, dir });
+    }
+    onEnd(e) {
+      this.mode = "result";
+      const s = e.stats;
+      const ok = e.result === "success";
+      const head = ok ? `기술 성공 — 낙법 ${e.ukemi?.toUpperCase() ?? ""}` : `실패 — ${this.branchLabel ?? ""}`;
+      this.panel.setVisible(true);
+      this.centerText.setVisible(true).setColor(ok && e.ukemi ? hex(UKEMI_COLOR[e.ukemi]) : "#f87171").setText([
+        head,
+        "",
+        `Perfect ${s.successes}/${s.checks}   Early ${s.grades.early}   Late ${s.grades.late}   Miss ${s.grades.miss}`,
+        `SCORE ${s.score}   MUSUBI ${s.musubi}   DMG ${s.damage}   최대 연속 ${s.maxStreak}`,
+        "",
+        "Enter / R : 다시   M : 좌우 반전   T : 배속"
+      ].join("\n"));
+      this.hintText.setText("");
+    }
+    // ───────────────────────────── effects ─────────────────────────────
+    /** 가상시간 ms → 실시간 ms (카메라 효과는 실시간으로 동작) */
+    real(ms) {
+      return ms / Math.max(0.05, this.clock.scale);
+    }
+    flash(color, alpha, ms) {
+      this.tweens.killTweensOf(this.overlay);
+      this.overlay.setFillStyle(color, 1).setAlpha(alpha);
+      this.tweens.add({ targets: this.overlay, alpha: 0, duration: ms });
+    }
+    showPopup(text, color, sub = "") {
+      this.tweens.killTweensOf(this.popup);
+      this.popup.setText(sub ? `${text}
+${sub}` : text).setColor(hex(color)).setAlpha(1).setScale(1.5);
+      this.tweens.add({ targets: this.popup, scale: 1, duration: 120, ease: "Back.easeOut" });
+      this.tweens.add({ targets: this.popup, alpha: 0, delay: 650, duration: 250 });
+    }
+    floatText(text, x, y, color) {
+      const t = this.add.text(x, y, text, {
+        fontFamily: "monospace",
+        fontSize: "10px",
+        color: hex(color),
+        stroke: "#000000",
+        strokeThickness: 3
+      }).setOrigin(0.5, 1);
+      this.worldLayer.add(t);
+      this.tweens.add({ targets: t, y: y - 14, alpha: 0, duration: 650, onComplete: () => t.destroy() });
+    }
+    // ───────────────────────────── render ─────────────────────────────
+    idlePose(now) {
+      const elapsed = this.mode === "approach" ? now - this.approach.start : 0;
+      const q = this.snappy ? Math.floor(elapsed / SNAP_MS) * SNAP_MS : elapsed;
+      const ukeX = this.mode === "ready" ? APPROACH_FROM : Math.max(MAAI_X, APPROACH_FROM - q * this.approach.speed);
+      const idle = (anim, x, facing) => ({
+        x,
+        y: 0,
+        facing,
+        depth: 10,
+        anim,
+        frame: frameAt(ANIMS[anim], q),
+        offX: 0,
+        offY: 0
+      });
+      return { nage: idle("common.nage.kamae", 0, 1), uke: idle("common.uke.kamae", ukeX, -1) };
+    }
+    anchorOf(p, pushPx = 0) {
+      const sign = this.mirror ? -1 : 1;
+      const x = Math.round(this.originX() + sign * (p.x + p.offX * p.facing + pushPx));
+      const feet = Math.round(FLOOR_Y + p.y);
+      const h = bodyPose(p) === "lying" ? 12 : BODY_H - phaser_global_default.Math.Clamp(p.offY * 2, 0, 16);
+      return { x, top: feet - h - 10, chest: feet - Math.round(h * 0.65) };
+    }
+    drawActor(p, body, light, hitstop, pushPx) {
+      const g = this.world;
+      const a = this.anchorOf(p, pushPx);
+      const feet = Math.round(FLOOR_Y + p.y);
+      const fw = p.facing * (this.mirror ? -1 : 1);
+      g.fillStyle(0, 0.35).fillEllipse(a.x, FLOOR_Y + 1, 24, 4);
+      if (bodyPose(p) === "lying") {
+        g.fillStyle(body).fillRect(a.x - 20, feet - 12, 40, 12);
+        g.fillStyle(light).fillRect(fw > 0 ? a.x - 30 : a.x + 20, feet - 11, 10, 9);
+        if (hitstop) g.lineStyle(1, 16777215, 1).strokeRect(a.x - 31, feet - 13, 62, 14);
+        return a;
+      }
+      const h = feet - a.top - 10;
+      const bx = a.x - BODY_W / 2;
+      const by = feet - h;
+      g.fillStyle(body).fillRect(bx, by, BODY_W, h);
+      g.fillStyle(light).fillRect(a.x - 5, by - 10, 10, 9);
+      const arm = armPose(p);
+      if (arm === "up") g.fillRect(a.x + fw * 4 - 2, by - 22, 4, 14);
+      else if (arm === "strike") g.fillRect(fw > 0 ? a.x + 8 : a.x - 26, by + 4, 18, 4);
+      else g.fillRect(fw > 0 ? a.x + 8 : a.x - 14, by + 10, 6, 4);
+      if (hitstop) g.lineStyle(1, 16777215, 1).strokeRect(bx - 1, by - 11, BODY_W + 2, h + 12);
+      return a;
+    }
+    render(now) {
+      const g = this.world;
+      g.clear();
+      g.fillStyle(C.mat).fillRect(0, FLOOR_Y + 1, GAME_WIDTH, 3);
+      g.fillStyle(C.floor).fillRect(0, FLOOR_Y, GAME_WIDTH, 1);
+      const inTech = this.mode === "technique" || this.mode === "result";
+      const local = this.state?.nowMs ?? 0;
+      const pose = inTech && this.tracker.poseAt(local, this.snappy ? SNAP_MS : 0) || this.idlePose(now);
+      const hs = this.state?.hitstop ?? false;
+      let pushPx = 0;
+      if (this.push && inTech) {
+        const k = (local - this.push.start) / this.push.dur;
+        if (k >= 1) this.push = null;
+        else pushPx = -this.push.px * (1 - Math.max(0, k)) * pose.nage.facing;
+      }
+      this.drawMaai(pose, inTech);
+      const order = pose.nage.depth <= pose.uke.depth ? ["nage", "uke"] : ["uke", "nage"];
+      const anchors = {};
+      for (const who of order) {
+        anchors[who] = who === "nage" ? this.drawActor(pose.nage, C.nage, C.nageLight, hs, pushPx) : this.drawActor(pose.uke, C.uke, C.ukeLight, hs, 0);
+      }
+      const label = (t, p, a) => t.setVisible(this.labels).setPosition(a.x, a.top - 2).setText(`${shortAnim(p.anim)}[${p.frame}]`);
+      label(this.nageLabel, pose.nage, anchors.nage);
+      label(this.ukeLabel, pose.uke, anchors.uke);
+      this.drawFx(inTech ? local : 0);
+      this.drawHud();
+      this.dbg.draw(inTech ? this.state : null);
+    }
+    /** 마아이 자: 접근 중 · 마아이 페이즈에서 거리와 진입 가능 범위 표시 */
+    drawMaai(pose, inTech) {
+      const show = this.mode === "ready" || this.mode === "approach" || inTech && this.state?.id === "maai";
+      this.maaiText.setVisible(show);
+      if (!show) return;
+      const g = this.world;
+      const sign = this.mirror ? -1 : 1;
+      const { minPx, idealPx, maxPx } = TECH.requires.maai;
+      const nx = this.originX() + sign * pose.nage.x;
+      const ux = this.originX() + sign * pose.uke.x;
+      const d = Math.abs(pose.uke.x - pose.nage.x);
+      const ok = d >= minPx && d <= maxPx;
+      const bandA = nx + sign * minPx;
+      const bandB = nx + sign * maxPx;
+      g.fillStyle(2278750, ok ? 0.28 : 0.12).fillRect(Math.min(bandA, bandB), FLOOR_Y - 2, Math.abs(bandB - bandA), 2);
+      g.fillStyle(2278750, 0.6).fillRect(nx + sign * idealPx, FLOOR_Y - 4, 1, 4);
+      const y = FLOOR_Y - 62;
+      const col = ok ? 2278750 : 7434618;
+      g.fillStyle(col).fillRect(Math.min(nx, ux), y, Math.abs(ux - nx), 1);
+      g.fillRect(nx, y - 3, 1, 7).fillRect(ux, y - 3, 1, 7);
+      this.maaiText.setPosition((nx + ux) / 2, y - 2).setColor(hex(col)).setText(`間合い ${Math.round(d)}px${ok ? " ✓" : ""}`);
+    }
+    drawFx(t) {
+      const g = this.fxG;
+      g.clear();
+      this.fx = this.fx.filter((f) => t - f.start < f.dur);
+      for (const f of this.fx) {
+        const k = phaser_global_default.Math.Clamp((t - f.start) / f.dur, 0, 1);
+        if (f.kind === "ring") {
+          g.lineStyle(2, f.color, 1 - k).strokeCircle(f.x, f.y, 6 + k * 30);
+        } else if (f.kind === "spark") {
+          g.lineStyle(2, f.color, 1 - k);
+          for (let i = 0; i < 8; i++) {
+            const ang = i / 8 * Math.PI * 2;
+            const r1 = 3 + k * 10;
+            const r2 = 8 + k * 20;
+            g.lineBetween(f.x + Math.cos(ang) * r1, f.y + Math.sin(ang) * r1, f.x + Math.cos(ang) * r2, f.y + Math.sin(ang) * r2);
+          }
+        } else {
+          g.fillStyle(f.color, 0.45 * (1 - k)).fillRect(f.x - 8 + f.dir * (6 + k * 14), f.y + 10, BODY_W, BODY_H);
+        }
+      }
+    }
+    drawHud() {
+      const s = this.state?.stats;
+      this.hudLeft.setText(`ROUND ${this.round}   SCORE ${s?.score ?? 0}   DMG ${s?.damage ?? 0}`);
+      this.hudRight.setText(`x${SPEEDS[this.speedIdx]}  ${this.mirror ? "MIRROR" : "NORMAL"}  ${this.snappy ? "SNAP 10fps" : "SMOOTH"}`);
+      const g = this.hudG;
+      g.clear();
+      const musubi = s?.musubi ?? 50;
+      g.fillStyle(2565930).fillRect(8, 22, 110, 6);
+      g.fillStyle(2282478).fillRect(8, 22, Math.round(1.1 * musubi), 6);
+      g.fillStyle(5395035).fillRect(8 + 55, 21, 1, 8);
+      const stage = this.mode === "technique" || this.mode === "result" ? this.state?.stage ?? null : null;
+      const order = ["recognition", "entry", "throw"];
+      this.stageTexts.forEach((t, i) => t.setColor(stage === order[i] ? "#fafafa" : stage && order.indexOf(stage) > i ? "#71717a" : "#3f3f46"));
+      const st = this.state;
+      if (this.mode === "technique" && st?.kind === "phase") {
+        const p = TECH.phases.find((ph) => ph.id === st.id);
+        this.hintText.setText(this.hintFor(p, st.nageFacing));
+      } else if (this.mode === "technique") {
+        this.hintText.setText("");
+      }
+    }
+    hintFor(p, facing) {
+      const beats = beatsOf(p.input);
+      if (!beats.length) return p.id === "maai" ? "공격을 읽어라 — 정면타 예비동작" : "";
+      const key = (b) => b.button === "ACTION" ? "Z" : "X";
+      const one = (b) => b.type === "direction_press" ? `${this.arrow(b.direction, facing)} + ${key(b)}` : b.type === "hold_release" ? `${key(b)} 누르고 … 떼기` : key(b);
+      const cue = beats[0].sync ? `  @ ${beats[0].sync.actor}:${beats[0].sync.event}` : "";
+      return p.input.type === "sequence" ? `${one(beats[0])} ×${beats.length}  (리듬에 맞춰)` : `${one(beats[0])}${cue}`;
+    }
+    arrow(dir, facing) {
+      if (dir === "UP") return "↑";
+      if (dir === "DOWN") return "↓";
+      const world = (dir === "FORWARD" ? facing : -facing) * (this.mirror ? -1 : 1);
+      return world > 0 ? "→" : "←";
+    }
+  };
+
+  // src/prototype/main.ts
+  new phaser_global_default.Game(createGameConfig([PrototypeScene], "game"));
+})();
+
+</script>
+</body>
+</html>

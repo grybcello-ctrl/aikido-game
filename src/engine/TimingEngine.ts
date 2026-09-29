@@ -64,6 +64,16 @@ export type EngineEvent =
       wrongDirection: boolean;
       atMs: number;
     }
+  | {
+      type: 'inputIgnored';
+      button: Button;
+      /** idle: 판정할 비트 없음 / button: 다른 버튼 / outside_window: 구간 밖 / repeat: 키 리피트 / hold_late: 홀드 시작 마감 이후 */
+      reason: 'idle' | 'button' | 'outside_window' | 'repeat' | 'hold_late';
+      phaseId: string | null;
+      /** 현재 시퀀스 시작 기준 ms */
+      seqMs: number;
+      atMs: number;
+    }
   | { type: 'resolved'; phaseId: string; stage: Stage; result: OutcomeKey; goto: Goto; atMs: number }
   | { type: 'reaction'; phaseId: string; reaction: Reaction; atMs: number }
   | { type: 'fx'; anim: AnimKey; atMs: number }
@@ -78,6 +88,8 @@ export interface EngineState {
   kind: RunKind | null;
   id: string | null;
   stage: Stage | null;
+  /** 엔진 로컬 시간(start 기준, 히트스톱 동안 정지). 이벤트 atMs 와 같은 축 */
+  nowMs: number;
   /** 현재 시퀀스 시작 기준 경과(ms, 히트스톱 제외) — 렌더러가 tracks/anim 샘플링에 사용 */
   seqMs: number;
   durationMs: number;
@@ -215,6 +227,7 @@ export class TimingEngine {
       kind: r?.kind ?? null,
       id: r?.id ?? null,
       stage: r ? this.stageOf(r) : null,
+      nowMs: this.now,
       seqMs: r ? this.now - r.start : 0,
       durationMs: r ? durationOf(r) : 0,
       actors: r ? (r.kind === 'phase' ? r.phase.actors : r.script.actors) : null,
@@ -309,9 +322,22 @@ export class TimingEngine {
       this.onRelease(q.button);
       return;
     }
-    if (this.held.has(q.button)) return; // 키 리피트 무시
+    if (this.held.has(q.button)) {
+      this.ignore(q.button, 'repeat'); // 키 리피트 무시
+      return;
+    }
     this.held.add(q.button);
     this.onPress(q.button, q.stick);
+  }
+
+  private ignore(button: Button, reason: Extract<EngineEvent, { type: 'inputIgnored' }>['reason']): void {
+    const r = this.run;
+    this.emit({
+      type: 'inputIgnored', button, reason,
+      phaseId: r?.kind === 'phase' ? r.id : null,
+      seqMs: r ? this.now - r.start : 0,
+      atMs: this.now,
+    });
   }
 
   private currentBeat(): { r: PhaseRun; b: Beat } | null {
@@ -322,7 +348,8 @@ export class TimingEngine {
 
   private onPress(button: Button, stick: Stick | undefined): void {
     const cur = this.currentBeat();
-    if (!cur || cur.b.button !== button) return;
+    if (!cur) return this.ignore(button, 'idle');
+    if (cur.b.button !== button) return this.ignore(button, 'button');
     const { r, b } = cur;
     const t = this.now - r.start;
 
@@ -330,13 +357,15 @@ export class TimingEngine {
       if (r.holdStart === null && t < (b.holdStartMaxMs ?? 0)) {
         r.holdStart = this.now;
         this.emit({ type: 'holdStart', phaseId: r.id, beat: r.beatIdx, atMs: this.now });
+      } else {
+        this.ignore(button, 'hold_late');
       }
       return;
     }
 
     const d = t - b.targetMs;
     const g = gradeOffset(b.window, d);
-    if (g === null) return; // 판정 구간 밖
+    if (g === null) return this.ignore(button, 'outside_window');
 
     if (b.type === 'direction_press' && this.relDirection(stick, r.inputFacing) !== b.direction) {
       this.judge(r, 'miss', d, true); // 틀린 방향 = 잘못된 기술 선택

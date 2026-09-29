@@ -126,7 +126,7 @@
         "window": { "early": [-200, -50], "perfect": [-50, 50], "late": [50, 150] }
       },
       "outcomes": {
-        "perfect": { "goto": "phase:tenkan", "score": 100, "musubi": 20, "hitstopMs": 83, "fx": "tech.shomenuchi_iriminage_ura.fx.musubi_ring" },
+        "perfect": { "goto": "phase:tenkan", "score": 100, "musubi": 20, "hitstopMs": 120, "fx": "tech.shomenuchi_iriminage_ura.fx.musubi_ring" },
         "early":   { "goto": "branch:whiff_hit", "musubi": -10, "reaction": { "type": "whiff" } },
         "late":    { "goto": "branch:clash_pushback", "musubi": -10, "reaction": { "type": "clash", "px": 12 } },
         "miss":    { "goto": "branch:struck", "reaction": { "type": "hit" } }
@@ -163,7 +163,7 @@
         "window": { "early": [-180, -60], "perfect": [-60, 60], "late": [60, 180] }
       },
       "outcomes": {
-        "perfect": { "goto": "phase:musubi", "score": 100, "musubi": 15 },
+        "perfect": { "goto": "phase:musubi", "score": 100, "musubi": 15, "hitstopMs": 100 },
         "early":   { "goto": "phase:musubi", "score": 30, "musubi": -10, "reaction": { "type": "whiff" } },
         "late":    { "goto": "phase:musubi", "score": 30, "musubi": -10, "reaction": { "type": "pushback", "px": 6 } },
         "miss":    { "goto": "branch:uke_escape" }
@@ -203,7 +203,7 @@
             "window": { "early": [-100, -40], "perfect": [-40, 40], "late": [40, 100] } }
         ],
         "beatEffects": {
-          "perfect": { "score": 50, "musubi": 5 },
+          "perfect": { "score": 50, "musubi": 5, "hitstopMs": 100 },
           "early":   { "musubi": -5, "reaction": { "type": "whiff" } },
           "late":    { "musubi": -5, "reaction": { "type": "pushback", "px": 4 } }
         }
@@ -244,7 +244,7 @@
         "window": { "early": [-150, -50], "perfect": [-50, 50], "late": [50, 150] }
       },
       "outcomes": {
-        "perfect": { "goto": "ukemi", "score": 200, "musubi": 20, "hitstopMs": 100, "fx": "common.fx.hit_spark" },
+        "perfect": { "goto": "ukemi", "score": 200, "musubi": 20, "hitstopMs": 150, "fx": "common.fx.hit_spark" },
         "early":   { "goto": "ukemi", "score": 50, "reaction": { "type": "whiff" } },
         "late":    { "goto": "ukemi", "score": 50, "reaction": { "type": "clash", "px": 4 } },
         "miss":    { "goto": "branch:uke_escape" }

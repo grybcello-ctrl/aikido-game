@@ -8,13 +8,15 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "validate:data": "node scripts/validate-data.mjs"
+    "validate:data": "node scripts/validate-data.mjs",
+    "build:prototype": "node scripts/build-prototype.mjs"
   },
   "dependencies": {
     "phaser": "3.90.0"
   },
   "devDependencies": {
     "ajv": "^8.17.1",
+    "esbuild": "^0.28.2",
     "typescript": "~5.9.0",
     "vite": "^8.0.0"
   }
